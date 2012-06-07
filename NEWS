@@ -1,0 +1,59 @@
+News for libStorageMgmt
+
+0.0.8: June 4 2012
+    - Make building of SMI-S CPP plugin optional
+    - Add pkg-config file
+    - SMIS: Fix exception while retrieving Volumes
+    - SMIS: Fix exception while retrieving Volumes
+    - lsm: Add package imports
+    - Make Smis class available in lsm python package
+    - Add option to disable building C unit test
+    - Make simulator classes available in lsm python package
+    - Make ontap class available in lsm python package
+    - Changes to support building on Fedora 17 (v2)
+    - Spec. file updates from feedback from T. Callaway (spot)
+    - F17 linker symbol visibility correction
+    - Remove unneeded build dependencies and cleaned up some warnings
+    - C Updates, client C library feature parity with python
+
+0.0.7: May 11 2012
+	- Bug fix for smi-s constants
+	- Display formatting improvements
+	- Added header option for lsmcli
+	- Improved version handling for builds
+	- Made terminology consistent
+	- Ability to list visibility for access groups and volumes
+	- Simulator plug-in fully supports all block operations
+	- Added support for multiple systems with a single plug-in instance
+
+0.0.6: Apr 20 2012
+    - Documentation improvements (man & source code)
+    - Support for access groups
+    - Unified spec files Fedora/RHEL
+    - Package version auto generate
+    - Rpm target added to make
+    - Bug fix for missing optional property on volume retrieval (smispy plug-in)
+
+0.0.5: Apr 6 2012
+    - Spec file clean-up improvements
+    - Async. operation added to lsmcli and ability to check on job status
+    - Sub volume replication support
+    - Ability to check for child dependencies on VOLUMES, FS and files
+    - SMI-S Bug fixes and improvements
+
+0.0.4: Mar 26 2012
+    - Restore from snapshot
+    - Job identifiers string instead of integer
+    - Updated license address
+
+0.0.3: Mar 19 2012
+    - Updated to support better packaging
+    - Fixes for NFS export handling
+    - Simulator persistent state
+
+0.0.2: Mar 11 2012
+    - Native plugin for NetApp
+
+0.0.1alpha: Feb 3 2012
+    - First release in package form
+    - Basic operation utilizing SMI-S providers.
