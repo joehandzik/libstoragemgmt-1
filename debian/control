@@ -1,7 +1,7 @@
 Source: libstoragemgmt
 Priority: extra
 Maintainer: Ritesh Raj Sarraf <rrs@debian.org>
-Build-Depends: debhelper (>= 8.0.0), libyajl-dev, autoconf, libtool, libxml2
+Build-Depends: debhelper (>= 8.0.0), libyajl-dev, autoconf, automake, libtool, libxml2
 Standards-Version: 3.9.2
 Section: libs
 Homepage: http://sourceforge.net/apps/trac/libstoragemgmt/
