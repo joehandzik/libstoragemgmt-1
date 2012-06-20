@@ -1,0 +1,5 @@
+libstoragemgmt (0.0.8-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Wed, 20 Jun 2012 21:31:39 +0530
