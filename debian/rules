@@ -14,5 +14,5 @@
 
 override_dh_auto_configure:
 	autoreconf -i
-	./configure
+	./configure --disable-smis-cpp
 
