@@ -11,13 +11,12 @@ Homepage: http://sourceforge.net/apps/trac/libstoragemgmt/
 Package: libstoragemgmt-dev
 Section: libdevel
 Architecture: any
-Depends: libstoragemgmt0 (= ${binary:Version})
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}
+Description: library for storage array management
+ vendor agnostic library interface to manage storage arrays
 
 Package: libstoragemgmt0
-Section: libs
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Description: library for storage array management
+ vendor agnostic library interface to manage storage arrays
