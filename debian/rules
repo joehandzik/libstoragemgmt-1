@@ -14,7 +14,7 @@
 
 override_dh_auto_configure:
 	autoreconf -i
-	./configure --disable-smis-cpp --prefix=/usr
+	./configure --disable-smis-cpp --prefix=/usr --disable-static
 
 
 override_dh_installchangelogs:

@@ -8,15 +8,35 @@ Homepage: http://sourceforge.net/apps/trac/libstoragemgmt/
 #Vcs-Git: git://git.debian.org/collab-maint/libstoragemgmt.git
 #Vcs-Browser: http://git.debian.org/?p=collab-maint/libstoragemgmt.git;a=summary
 
+Package: libstoragemgmt-tools
+Architecture: any
+Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}
+Description: library for storage array management
+ vendor agnostic library interface to manage storage arrays
+ .
+ This package contains the cli tools
+
+Package: libstoragemgmt-daemon
+Architecture: any
+Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}
+Description: library for storage array management
+ vendor agnostic library interface to manage storage arrays
+ .
+ This package contains the daemon
+
 Package: libstoragemgmt-dev
 Section: libdevel
 Architecture: any
 Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}
 Description: library for storage array management
  vendor agnostic library interface to manage storage arrays
+ .
+ This package contains the development headers
 
 Package: libstoragemgmt0
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: library for storage array management
  vendor agnostic library interface to manage storage arrays
+ .
+ This package contains the library
