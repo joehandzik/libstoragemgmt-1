@@ -13,7 +13,7 @@ Architecture: any
 Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python
 Description: library for storage array management - cli tools
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
- provides a single, unified, agnostic api library interface to storage
+ provides a single, unified, agnostic API library interface to storage
  arrays
  .
  This package contains the cli tools
@@ -23,7 +23,7 @@ Architecture: any
 Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python
 Description: library for storage array management - daemon
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
- provides a single, unified, agnostic api library interface to storage
+ provides a single, unified, agnostic API library interface to storage
  arrays
  .
  This package contains the daemon
@@ -34,7 +34,7 @@ Architecture: any
 Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}
 Description: library for storage array management - development headers
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
- provides a single, unified, agnostic api library interface to storage
+ provides a single, unified, agnostic API library interface to storage
  arrays
  .
  This package contains the development headers
@@ -44,7 +44,7 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: library for storage array management - development library
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
- provides a single, unified, agnostic api library interface to storage
+ provides a single, unified, agnostic API library interface to storage
  arrays
  .
  This package contains the library
