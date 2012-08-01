@@ -49,6 +49,7 @@ result() {
 case "$1" in
   start)
 	status_lsm
+	check_dirs
 
 	echo -n "Starting $NAME daemon:		"
 
@@ -81,6 +82,7 @@ case "$1" in
 	;;
   force-reload | reload)
 	status_lsm
+	check_dirs
 	echo -n $"Reloading $NAME daemon: "
 	if [ $STATUS == 0 ] ; then
 		killproc -p $PID $NAME -HUP
@@ -94,6 +96,7 @@ case "$1" in
 	;;
   restart)
 	status_lsm
+	check_dirs
 	echo -n $"Restarting $NAME daemon: "	
 	if [ $STATUS == 0 ] ; then
 		$PROG --operation restart	
