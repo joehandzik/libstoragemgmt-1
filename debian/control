@@ -16,7 +16,7 @@ Description: library for storage array management - cli tools
  .
  This package contains the cli tools
 
-Package: libstoragemgmt-daemon
+Package: libstoragemgmtd
 Architecture: any
 Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python
 Description: library for storage array management - daemon
