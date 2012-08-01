@@ -31,7 +31,7 @@ Description: library for storage array management - daemon
 Package: python-libstoragemgmt
 Architecture: all
 Section: python
-Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python-support (>= 0.90)
+Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python-all (>= 2.6.6-3~)
 Description: library for storage array management - Python libraries
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
  provides a single, unified, agnostic API library interface to storage
