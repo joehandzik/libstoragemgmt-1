@@ -1,2 +1,3 @@
 usr/bin/lsmd
 usr/bin/*_lsmplugin
+usr/share/man/man1/lsmd.1
