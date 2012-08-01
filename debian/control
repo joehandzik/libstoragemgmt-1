@@ -10,7 +10,7 @@ Homepage: http://sourceforge.net/apps/trac/libstoragemgmt/
 
 Package: libstoragemgmt-tools
 Architecture: any
-Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python
+Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python-libstoragemgmt
 Description: library for storage array management - cli tools
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
  provides a single, unified, agnostic API library interface to storage
@@ -20,7 +20,7 @@ Description: library for storage array management - cli tools
 
 Package: libstoragemgmtd
 Architecture: any
-Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python
+Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python-libstoragemgmt
 Description: library for storage array management - daemon
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
  provides a single, unified, agnostic API library interface to storage
