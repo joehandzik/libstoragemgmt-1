@@ -2,12 +2,13 @@
 #	       
 # chkconfig: 2345 99 1
 ### BEGIN INIT INFO
-# Provides: libstoragmgmtd
-# Required-Start: $local_fs
-# Required-Stop: $local_fs
+# Provides: libstoragemgmtd
+# Required-Start: $remote_fs $local_fs
+# Required-Stop: $remote_fs $local_fs
 # Default-Start: 2 3 4 5
 # Default-Stop: 0 1 6
 # Short-Description: libStorageMgmt plug-in daemon
+# Description: libStorageMgmt plug-in daemon
 ### END INIT INFO
 
 . /etc/init.d/functions
@@ -78,7 +79,7 @@ case "$1" in
 
 	result
 	;;
-  reload)
+  force-reload | reload)
 	status_lsm
 	echo -n $"Reloading $NAME daemon: "
 	if [ $STATUS == 0 ] ; then
