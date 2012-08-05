@@ -30,6 +30,9 @@ fi
 check_dirs() {
 	test -d /var/run/lsm || mkdir -p /var/run/lsm/ipc
 	test -d /var/run/lsm/ipc || mkdir -p /var/run/lsm/ipc
+	
+	# And fix ownership
+	chown libstoragemgmt.libstoragemgmt -R /var/run/lsm
 }
 
 
