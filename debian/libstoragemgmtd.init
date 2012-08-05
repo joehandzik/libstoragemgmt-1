@@ -17,6 +17,7 @@ NAME=lsmd
 PROG=/usr/bin/$NAME
 PID=/var/run/lsm/lsmd.pid
 LOCK=/var/lock/subsys/libstoragemgmtd
+DAEMON=libstoragemgmtd
 
 RETVAL=0
 STATUS=0
@@ -31,85 +32,46 @@ check_dirs() {
 	test -d /var/run/lsm/ipc || mkdir -p /var/run/lsm/ipc
 }
 
-status_lsm() {
-	status -p $PID $NAME > /dev/null 2>&1
-	STATUS=$?
+
+start_lsm() {
+	log_daemon_msg "Starting $NAME daemon:"
+	start-stop-daemon --start --quiet --pidfile $PID --exec $DAEMON
+
+	RETVAL=$?
+	log_end_msg $RETVAL
 }
 
-result() {
-	if [ $RETVAL -eq 0 ]; then
-		success
-	else
-		failure
-	fi
-	echo
+stop_lsm() {
+	log_daemon_msg "Stopping $NAME daemon:"
+	start-stop-daemon --stop --quiet --signal TERM --pidfile $PID --exec $DAEMON
+	log_end_msg 0
 }
 
 # See how we were called.
 case "$1" in
   start)
-	status_lsm
 	check_dirs
+	start_lsm
 
-	echo -n "Starting $NAME daemon:		"
-
-	if [ $STATUS != 0 ] ; then
-		$PROG --operation start
-		RETVAL=$?
-
-		[ $RETVAL -eq 0 ] && touch $LOCK
-	else	
-		RETVAL=$STATUS
-	fi
-
-	result
 	;;
   force-stop|stop)
-	echo -n $"Stopping $NAME daemon: "
-	status_lsm
-	if [ $STATUS == 0 ] ; then
-		$PROG --operation stop
-		RETVAL=$?
-
-        	if [ $RETVAL -eq 0 ]; then
-			rm -f $LOCK
-		fi
-	else
-		RETVAL=0
-	fi
-
-	result
+	stop_lsm
 	;;
   force-reload | reload)
-	status_lsm
 	check_dirs
-	echo -n $"Reloading $NAME daemon: "
-	if [ $STATUS == 0 ] ; then
-		killproc -p $PID $NAME -HUP
-		RETVAL=$?
-	else
-		$PROG --operation start
-		RETVAL=$?
-	fi
-
-	result
+	log_daemon_msg "Reloading $NAME daemon:"
+	
+	pkill -F $PID --signal HUP $NAME
+	log_end_msg 0
 	;;
   restart)
-	status_lsm
+	stop_lsm
 	check_dirs
-	echo -n $"Restarting $NAME daemon: "	
-	if [ $STATUS == 0 ] ; then
-		$PROG --operation restart	
-	else
-		$PROG --operation start
-	fi
-
-	result
+	start_lsm
 	;;
 
   status)
-	status -p $PID $NAME
-	RETVAL=$?
+	status_of_proc -p $PID $DAEMON "libstoragemgmtd daemon" && return 0 || return $?
 	;;
 
   *)
