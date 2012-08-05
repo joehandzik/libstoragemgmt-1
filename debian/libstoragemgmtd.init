@@ -35,7 +35,7 @@ check_dirs() {
 
 start_lsm() {
 	log_daemon_msg "Starting $NAME daemon:"
-	start-stop-daemon --start --quiet --pidfile $PID --exec $DAEMON
+	start-stop-daemon --start --quiet --pidfile $PID --exec $PROG
 
 	RETVAL=$?
 	log_end_msg $RETVAL
@@ -43,7 +43,7 @@ start_lsm() {
 
 stop_lsm() {
 	log_daemon_msg "Stopping $NAME daemon:"
-	start-stop-daemon --stop --quiet --signal TERM --pidfile $PID --exec $DAEMON
+	start-stop-daemon --stop --quiet --signal TERM --pidfile $PID --exec $PROG
 	log_end_msg 0
 }
 
@@ -71,7 +71,7 @@ case "$1" in
 	;;
 
   status)
-	status_of_proc -p $PID $DAEMON "libstoragemgmtd daemon" && return 0 || return $?
+	status_of_proc -p $PID $PROG "libstoragemgmtd daemon" && return 0 || return $?
 	;;
 
   *)
