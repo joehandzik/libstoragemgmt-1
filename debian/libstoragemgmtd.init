@@ -11,7 +11,7 @@
 # Description: libStorageMgmt plug-in daemon
 ### END INIT INFO
 
-. /etc/init.d/functions
+. /lib/lsb/init-functions
 
 NAME=lsmd
 PROG=/usr/bin/$NAME
