@@ -10,7 +10,7 @@ configure)
         fi
         if ! getent passwd | grep -q "^libstoragemgmt:"; then
                 echo "Adding libstoragemgmt user..."
-                adduser --quiet --system --groub libstoragemgmt --disabled-login libstoragemgmt || true
+                adduser --quiet --system --group libstoragemgmt --disabled-login libstoragemgmt || true
         fi
         ;;
 abort-upgrade|abort-remove|abort-deconfigure)
