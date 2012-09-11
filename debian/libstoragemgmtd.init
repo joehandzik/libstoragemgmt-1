@@ -18,6 +18,7 @@ PROG=/usr/bin/$NAME
 PID=/var/run/lsm/lsmd.pid
 LOCK=/var/lock/subsys/libstoragemgmtd
 DAEMON=libstoragemgmtd
+PYTHON=/usr/bin/python
 
 RETVAL=0
 STATUS=0
@@ -46,7 +47,7 @@ start_lsm() {
 
 stop_lsm() {
 	log_daemon_msg "Stopping $NAME daemon:"
-	start-stop-daemon --stop --quiet --signal TERM --pidfile $PID --exec $PROG
+	start-stop-daemon --stop --quiet --signal TERM --pidfile $PID --exec $PYTHON -- --operation stop
 	log_end_msg 0
 }
 
