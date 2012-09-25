@@ -2,8 +2,9 @@ libstoragemgmt (0.0.12-1) experimental; urgency=low
 
   * [893e0f5] Imported Upstream version 0.0.12
   * [6bbf4d0] Add build-dep on libglib2.0-dev, python-m2crypto
+  * [26ccf33] Add Depends on shared library shlibdeps
 
- -- Ritesh Raj Sarraf <rrs@debian.org>  Tue, 25 Sep 2012 18:47:07 +0530
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Tue, 25 Sep 2012 19:37:28 +0530
 
 libstoragemgmt (0.0.9-1) experimental; urgency=low
 
