@@ -17,32 +17,13 @@
  * Author: tasleson
  */
 
-#include "misc.h"
-#include "qparams.h"
-#include <string>
-#include <string.h>
+#ifndef LSM_VERSION_H_
+#define LSM_VERSION_H_
 
-namespace LSM {
+#define LSM_MAJOR	@LIBSM_MAJOR_VERSION@
+#define LSM_MINOR	@LIBSM_MINOR_VERSION@
+#define LSM_MICRO	@LIBSM_MICRO_VERSION@
 
-std::string getValue(std::string uri, std::string key)
-{
-    int i;
-    std::string rc;
-    struct qparam_set *queryParamSet = NULL;
+#define LSM_VERSION ((LSM_MAJOR * 10000) + (LSM_MINOR * 100) + LSM_MICRO)
 
-    queryParamSet = qparam_query_parse(uri.c_str());
-    if( NULL == queryParamSet ) {
-        return rc;
-    } else {
-        for( i = 0; i < queryParamSet->n; ++i ) {
-            if(strcmp(queryParamSet->p[i].name, key.c_str()) == 0 ) {
-                rc = queryParamSet->p[i].value;
-                break;
-            }
-        }
-        free_qparam_set(queryParamSet);
-    }
-    return rc;
-}
-
-}
+#endif

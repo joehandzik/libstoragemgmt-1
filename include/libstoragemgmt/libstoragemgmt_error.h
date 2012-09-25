@@ -52,6 +52,7 @@ typedef enum {
     LSM_ERR_INTERNAL_ERROR = 1,         /**< Internal error */
     LSM_ERR_JOB_STARTED = 7,            /**< Operation has started */
     LSM_ERR_INDEX_BOUNDS = 10,          /**< Out of bounds on string index */
+    LSM_ERR_TIMEOUT = 11,               /**< Plug-in is un-responsive */
 
     LSM_ERR_EXISTS_ACCESS_GROUP = 50,   /**< Access group exists */
     LSM_ERR_EXISTS_FS = 51,             /**< FS exists */
@@ -75,7 +76,10 @@ typedef enum {
     LSM_ERR_INVALID_SS = 112,           /**< Invalid snapshot */
     LSM_ERR_INVALID_URI = 113,          /**< Invalid uri */
     LSM_ERR_INVALID_VAL = 114,          /**< Invalid value */
-    LSM_ERR_INVALID_VOL = 115,          /**< Invalid job pointer */
+    LSM_ERR_INVALID_VOL = 115,          /**< Invalid volume pointer */
+    LSM_ERR_INVALID_CAPABILITY = 116,   /**< Invalid capability pointer */
+    LSM_ERR_INVALID_SYSTEM = 117,       /**< Invalid system pointer */
+    LSM_ERR_INVALID_IQN = 118,          /**< Invalid IQN */
 
     LSM_ERR_IS_MAPPED = 125,            /**< Mapping already exists */
 
@@ -90,9 +94,11 @@ typedef enum {
     LSM_ERR_NOT_FOUND_POOL = 203,       /**< Specified POOL not found */
     LSM_ERR_NOT_FOUND_SS = 204,         /**< Specified snap shot not found */
     LSM_ERR_NOT_FOUND_VOLUME = 205,     /**< Specified volume not found */
+    LSM_ERR_NOT_FOUND_NFS_EXPORT = 206, /**< NFS export not found */
+    LSM_ERR_NOT_FOUND_INITIATOR = 207,  /**< Initiator not found */
 
-    LSM_ERR_NOT_IMPLEMENTED = 206,      /**< Feature not implemented */
-    LSM_ERR_NOT_LICENSED = 207,         /**< Need license for feature */
+    LSM_ERR_NOT_IMPLEMENTED = 225,      /**< Feature not implemented */
+    LSM_ERR_NOT_LICENSED = 226,         /**< Need license for feature */
 
     LSM_ERR_OFF_LINE = 250,             /**< Specified element is off line */
     LSM_ERR_ON_LINE = 251,              /**< Specified element is on line */
@@ -107,14 +113,17 @@ typedef enum {
     LSM_ERR_PLUGIN_PERMISSIONS = 307,   /**< Unable to access plugin */
     LSM_ERR_PLUGIN_REGISTRATION = 308,  /**< Error during plug-in registration */
     LSM_ERR_PLUGIN_UNKNOWN_HOST = 309,  /**< Name resolution failed */
+    LSM_ERR_PLUGIN_TIMEOUT = 310,       /**< Plug-in timed out talking to array */
 
     LSM_ERR_SIZE_INSUFFICIENT_SPACE = 350,  /**< Insufficient space */
     LSM_ERR_VOLUME_SAME_SIZE = 351,         /**< Trying to resize to same size */
     LSM_ERR_SIZE_TOO_LARGE = 352,           /**< Size specified is too large */
     LSM_ERR_SIZE_TOO_SMALL = 353,           /**< Size specified is too small */
+    LSM_ERR_SIZE_LIMIT_REACHED = 354,       /**< Limit has been reached */
 
     LSM_ERR_TRANSPORT_COMMUNICATION = 400,    /**< Error comunicating with plug-in */
-    LSM_ERR_TRANS_PORT_SERIALIZATION = 401,   /**< Transport serialization error */
+    LSM_ERR_TRANSPORT_SERIALIZATION = 401,   /**< Transport serialization error */
+    LSM_ERR_TRANSPORT_INVALID_ARG = 402,        /**< Parameter transported over IPC is invalid */
 
     LSM_ERR_UNSUPPORTED_INITIATOR_TYPE = 450,   /**< Unsupported initiator type */
     LSM_ERR_UNSUPPORTED_PROVISIONING = 451,     /**< Unsupported provisioning */

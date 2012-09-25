@@ -31,6 +31,14 @@
 extern "C" {
 #endif
 
+/* Just incase we want to change the flag to a different type */
+typedef uint64_t lsmFlag_t;
+
+#define LSM_FLAG_RSVD 0
+#define LSM_FLAG_UNUSED_CHECK(x) ( x != 0 )
+#define LSM_FLAG_GET_VALUE(x) x["flags"].asUint64_t()
+#define LSM_FLAG_EXPECTED_TYPE(x) (Value::numeric_t == x["flags"].valueType())
+
 /**
  * Opaque data type for a connection.
  */
@@ -74,11 +82,6 @@ typedef lsmAccessGroup *lsmAccessGroupPtr;
 typedef struct _lsmFileSystem lsmFileSystem;
 typedef lsmFileSystem *lsmFileSystemPtr;
 
-/**
- * Opaque data type for snapshots
- */
-typedef struct _lsmSnapShot lsmSnapShot;
-typedef lsmFileSystem *lsmSnapShotPtr;
 
 /**
  * Opaque data type for nfs exports
@@ -120,11 +123,12 @@ typedef lsmSs *lsmSsPtr;
  * Different types of replications that can be created
  */
 typedef enum {
-    LSM_VOLUME_REPLICATE_UNKNOWN = -1,
-    LSM_VOLUME_REPLICATE_SNAPSHOT = 1,
-    LSM_VOLUME_REPLICATE_CLONE    = 2,
-    LSM_VOLUME_REPLICATE_COPY     = 3,
-    LSM_VOLUME_REPLICATE_MIRROR   = 4,
+    LSM_VOLUME_REPLICATE_UNKNOWN        = -1,
+    LSM_VOLUME_REPLICATE_SNAPSHOT       = 1,
+    LSM_VOLUME_REPLICATE_CLONE          = 2,
+    LSM_VOLUME_REPLICATE_COPY           = 3,
+    LSM_VOLUME_REPLICATE_MIRROR_SYNC    = 4,
+    LSM_VOLUME_REPLICATE_MIRROR_ASYNC   = 5
 } lsmReplicationType;
 
 /**
@@ -164,6 +168,17 @@ typedef enum {
 #define LSM_VOLUME_OP_STATUS_ERROR      0x4     /**< Volume is non-functional */
 #define LSM_VOLUME_OP_STATUS_STARTING   0x8     /**< Volume in the process of becomming ready */
 #define LSM_VOLUME_OP_STATUS_DORMANT    0x10    /**< Volume is inactive or quiesced */
+
+/**
+ * Different states a system status can be in.
+ * Bit field, can be in multiple states at the same time.
+ */
+#define LSM_SYSTEM_STATUS_UNKNOWN               0x00000000
+#define LSM_SYSTEM_STATUS_OK                    0x00000001
+#define LSM_SYSTEM_STATUS_DEGRADED              0x00000002
+#define LSM_SYSTEM_STATUS_ERROR                 0x00000004
+#define LSM_SYSTEM_STATUS_PREDICTIVE_FAILURE    0x00000008
+#define LSM_SYSTEM_STATUS_VENDOR_SPECIFIC       0x00000010
 
 /**
  * Different types of initiator IDs

@@ -29,6 +29,39 @@ UDS_PATH = '/var/run/lsm/ipc'
 #Set to True for verbose logging
 LOG_VERBOSE = True
 
+## Constant for MiB
+MiB = 1048576
+## Constant for GiB
+GiB = 1073741824
+## Constant for TiB
+TiB = 1099511627776
+
+##Converts the size into human format.
+# @param    size    Size in bytes
+# @param    human   True|False
+# @return Human representation of size
+def sh(size, human=False):
+    """
+    Size for humans
+    """
+    units = None
+
+    if human:
+        if size >= TiB:
+            size /= float(TiB)
+            units = "TiB"
+        elif size >= GiB:
+            size /= float(GiB)
+            units = "GiB"
+        elif size >= MiB:
+            size /= float(MiB)
+            units = "MiB"
+
+    if units:
+        return "%.2f " % size + units
+    else:
+        return size
+
 ## Common method used to parse a URI.
 # @param    uri         The uri to parse
 # @param    requires    Optional list of keys that must be present in output
@@ -145,8 +178,10 @@ class LsmError(Exception):
         self.data = data
 
     def __str__(self):
-        return "error: %s msg: %s" % (self.code, self.msg)
-
+        if self.data is not None:
+            return "error: %s msg: %s data: %s" % (self.code, self.msg, self.data)
+        else:
+            return "error: %s msg: %s " % (self.code, self.msg)
 
 def addl_error_data(domain, level, exception, debug = None, debug_data = None):
     """
@@ -186,6 +221,7 @@ class ErrorNumber(object):
     INTERNAL_ERROR = 1
     JOB_STARTED = 7
     INDEX_BOUNDS = 10
+    TIMEOUT = 11
 
     EXISTS_ACCESS_GROUP = 50
     EXISTS_FS = 51
@@ -210,6 +246,9 @@ class ErrorNumber(object):
     INVALID_URI = 113
     INVALID_VALUE = 114
     INVALID_VOLUME = 115
+    INVALID_CAPABILITY = 116
+    INVALID_SYSTEM = 117
+    INVALID_IQN = 118
 
     IS_MAPPED = 125
 
@@ -224,9 +263,11 @@ class ErrorNumber(object):
     NOT_FOUND_POOL = 203
     NOT_FOUND_SS = 204
     NOT_FOUND_VOLUME = 205
+    NOT_FOUND_NFS_EXPORT = 206
+    NOT_FOUND_INITIATOR = 207
 
-    NOT_IMPLEMENTED = 206
-    NOT_LICENSED = 207
+    NOT_IMPLEMENTED = 225
+    NOT_LICENSED = 226
 
     OFF_LINE = 250
     ON_LINE = 251
@@ -241,14 +282,17 @@ class ErrorNumber(object):
     PLUGIN_PERMISSION = 307
     PLUGIN_REGISTRATION = 308
     PLUGIN_UNKNOWN_HOST = 309
+    PLUGIN_TIMEOUT = 310
 
     SIZE_INSUFFICIENT_SPACE = 350
     SIZE_SAME = 351
     SIZE_TOO_LARGE = 352
     SIZE_TOO_SMALL = 353
+    SIZE_LIMIT_REACHED = 354
 
     TRANSPORT_COMMUNICATION = 400
     TRANSPORT_SERIALIZATION = 401
+    TRANSPORT_INVALID_ARG = 402
 
     UNSUPPORTED_INITIATOR_TYPE = 450
     UNSUPPORTED_PROVISIONING = 451

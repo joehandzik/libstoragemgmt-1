@@ -16,12 +16,15 @@
 # Author: tasleson
 
 import urllib2
+import socket
 from xml.etree import ElementTree
 import time
 from external.xmltodict import ConvertXmlToDict
+from M2Crypto import RC4
+from binascii import hexlify
 
 #Set to an appropriate directory and file to dump the raw response.
-from lsm.common import ErrorNumber, LsmError
+from lsm.common import ErrorNumber
 
 xml_debug = None
 
@@ -50,7 +53,9 @@ def param_value(val):
         rc = val
     return rc
 
-def netapp_filer(host, username, password, command, parameters = None, ssl=False):
+def netapp_filer(host, username, password, timeout, command, parameters = None,
+                 ssl=False):
+
     """
     Issue a command to the NetApp filer.
     Note: Change to default ssl on before we ship a release version.
@@ -86,13 +91,23 @@ def netapp_filer(host, username, password, command, parameters = None, ssl=False
 </netapp>
 """ % payload
 
-    handler = urllib2.urlopen(req, data)
-
+    handler = None
     rc = None
-    if handler.getcode() == 200:
-        rc = netapp_filer_parse_response(handler.read())
+    try:
+        handler = urllib2.urlopen(req, data, float(timeout))
 
-    handler.close()
+        if handler.getcode() == 200:
+            rc = netapp_filer_parse_response(handler.read())
+    except urllib2.HTTPError, he:
+        raise he
+    except urllib2.URLError, e:
+        if isinstance(e.reason, socket.timeout):
+            raise FilerError(60, "Connection timeout")
+        else:
+            raise e
+    finally:
+        if handler:
+            handler.close()
 
     return rc
 
@@ -124,6 +139,8 @@ class Filer(object):
     Note: These are using lsm terminology.
     """
     ENOSPC = 28                     #Out of space
+    ETIMEOUT = 60                   #Time-out
+    EINVALID_ISCSI_NAME = 9006      #Invalid ISCSI IQN
     ENO_SUCH_VOLUME = 9017          #lun not found
     ESIZE_TOO_LARGE = 9034          #Specified too large a size
     ENO_SUCH_FS = 9036              #FS not found
@@ -139,7 +156,7 @@ class Filer(object):
 
     def _invoke(self, command, parameters = None):
 
-        rc = netapp_filer(self.host, self.username, self.password,
+        rc = netapp_filer(self.host, self.username, self.password, self.timeout,
             command, parameters, self.ssl)
 
         t = rc['netapp']['results']['attrib']
@@ -149,10 +166,11 @@ class Filer(object):
 
         return rc['netapp']['results']
 
-    def __init__(self, host, username, password, ssl=True):
+    def __init__(self, host, username, password, timeout, ssl=True):
         self.host = host
         self.username = username
         self.password = password
+        self.timeout = timeout
         self.ssl = ssl
 
     def system_info(self):
@@ -235,20 +253,17 @@ class Filer(object):
         self._invoke('lun-resize', {'path':lun_path, 'size':size_bytes,
                                     'force':'true'})
 
-    def volume_resize(self,  na_vol_name, size_diff):
+    def volume_resize(self,  na_vol_name, size_diff_kb):
         """
-        Given a NetApp volume name and a size change in bytes, re-size the
+        Given a NetApp volume name and a size change in kb, re-size the
         NetApp volume.
         """
         params = { 'volume':na_vol_name }
 
-        #Pad the increase for snapshot stuff
-        size_diff = int((size_diff/1024) * 1.3)
-
-        if size_diff > 0:
-            params['new-size'] = '+' + str(size_diff)+'k'
+        if size_diff_kb > 0:
+            params['new-size'] = '+' + str(size_diff_kb)+'k'
         else:
-            params['new-size'] = str(size_diff)+'k'
+            params['new-size'] = str(size_diff_kb)+'k'
 
         self._invoke('volume-size', params)
         return None
@@ -348,7 +363,7 @@ class Filer(object):
             params['destination-path'] = dest_path
 
         if backing_snapshot:
-            raise FilerError(LsmError.NOT_IMPLEMENTED,
+            raise FilerError(ErrorNumber.NOT_IMPLEMENTED,
                 "Support for backing luns not implemented for this API version")
             #params['snapshot-name']= backing_snapshot
 
@@ -415,6 +430,25 @@ class Filer(object):
 
     def igroup_delete(self, name):
         self._invoke('igroup-destroy', {'initiator-group-name':name})
+
+    @staticmethod
+    def encode(password):
+        rc4 = RC4.RC4()
+        rc4.set_key("#u82fyi8S5\017pPemw")
+        return hexlify(rc4.update(password))
+
+    def iscsi_initiator_add_auth(self, initiator, user_name, password ):
+        pw = self.encode(password)
+
+        args = {'initiator': initiator }
+
+        if user_name and len(user_name) and password and len(password):
+            args.update({'user-name':user_name,
+                'password': pw, 'auth-type':"CHAP"})
+        else:
+            args.update({'initiator': initiator, 'auth-type':"none" })
+
+        self._invoke('iscsi-initiator-add-auth', args)
 
     def igroup_add_initiator(self, ig, initiator):
         self._invoke('igroup-add', {'initiator-group-name':ig, 'initiator':initiator} )
