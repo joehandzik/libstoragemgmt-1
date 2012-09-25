@@ -44,21 +44,14 @@ int main(int argc, char *argv[])
 
     int main_rc = 0;
     int lib_rc = lsmConnectPassword(a.uri.value.c_str(),
-                                    a.password.value.c_str(), &c, 30000, &e);
+                                    a.password.value.c_str(), &c, 30000, &e,
+                                    LSM_FLAG_RSVD);
 
     if( LSM_ERR_OK == lib_rc ) {
         debug_plugin();
         switch( a.c ) {
             case (LSM::LIST) : {
                 main_rc = list(a,c);
-                break;
-            }
-            case (LSM::CREATE_INIT) : {
-                main_rc = createInit(a,c);
-                break;
-            }
-            case (LSM::DELETE_INIT) : {
-                main_rc = deleteInit(a,c);
                 break;
             }
             case (LSM::CREATE_VOL) : {
@@ -73,14 +66,6 @@ int main(int argc, char *argv[])
                 main_rc = replicateVolume(a,c);
                 break;
             }
-            case (LSM::ACCESS_GRANT) : {
-                main_rc = accessGrant(a,c);
-                break;
-            }
-            case (LSM::ACCESS_REVOKE) : {
-                main_rc = accessRevoke(a,c);
-                break;
-            }
              case (LSM::RESIZE_VOLUME) : {
                 main_rc = resizeVolume(a,c);
                 break;
@@ -90,7 +75,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        lib_rc = lsmConnectClose(c);
+        lib_rc = lsmConnectClose(c, LSM_FLAG_RSVD);
         if( LSM_ERR_OK != lib_rc ) {
             printf("Error on close %d!\n", lib_rc);
         }

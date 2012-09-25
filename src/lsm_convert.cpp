@@ -18,6 +18,7 @@
  */
 
 #include "lsm_convert.hpp"
+#include "libstoragemgmt/libstoragemgmt_accessgroups.h"
 #include <libstoragemgmt/libstoragemgmt_blockrange.h>
 #include <libstoragemgmt/libstoragemgmt_nfsexport.h>
 
@@ -127,7 +128,8 @@ lsmSystem *valueToSystem(Value &system)
     if (isExpectedObject(system, "System")) {
         std::map<std::string, Value> i = system.asObject();
         rc = lsmSystemRecordAlloc(  i["id"].asString().c_str(),
-                                    i["name"].asString().c_str());
+                                    i["name"].asString().c_str(),
+                                    i["status"].asUint32_t());
     }
     return rc;
 }
@@ -139,37 +141,28 @@ Value systemToValue(lsmSystem *system)
         s["class"] = Value("System");
         s["id"] = Value(system->id);
         s["name"] = Value(system->name);
+        s["status"] = Value(system->status);
         return Value(s);
     }
     return Value();
 }
 
-lsmStringList *valueToStringList( Value &v, int *ok)
+lsmStringList *valueToStringList(Value &v)
 {
     lsmStringList *il = NULL;
 
     if( Value::array_t == v.valueType() ) {
         std::vector<Value> vl = v.asArray();
         uint32_t size = vl.size();
+        il = lsmStringListAlloc(size);
 
-        *ok = 1;    /* Assume success */
-
-        /* It is OK to return null when we have none */
-        if( size > 0 ) {
-            il = lsmStringListAlloc(size);
-
-            if( il ) {
-                for( uint32_t i = 0; i < size; ++i ) {
-                    if( LSM_ERR_OK !=
-                        lsmStringListSetElem(il, i, vl[i].asString().c_str())) {
-                        lsmStringListFree(il);
-                        il = NULL;
-                        *ok = 0;
-                        break;
-                    }
+        if( il ) {
+            for( uint32_t i = 0; i < size; ++i ) {
+                if(LSM_ERR_OK != lsmStringListSetElem(il, i, vl[i].asC_str())){
+                    lsmStringListFree(il);
+                    il = NULL;
+                    break;
                 }
-            } else {
-                *ok = 0;
             }
         }
     }
@@ -177,39 +170,35 @@ lsmStringList *valueToStringList( Value &v, int *ok)
 }
 
 Value stringListToValue( lsmStringList *sl) {
+    std::vector<Value> rc;
     if( LSM_IS_STRING_LIST(sl) ) {
-        std::vector<Value> rc;
         uint32_t size = lsmStringListSize(sl);
 
         for(uint32_t i = 0; i < size; ++i ) {
             rc.push_back(Value(lsmStringListGetElem(sl, i)));
         }
-        return rc;
     }
-    return Value();
+    return Value(rc);
 }
 
 lsmAccessGroup *valueToAccessGroup( Value &group )
 {
     lsmStringList *il = NULL;
     lsmAccessGroup *ag = NULL;
-    int ok = -1;
 
     if( isExpectedObject(group, "AccessGroup")) {
         std::map<std::string, Value> vAg = group.asObject();
 
-        il = valueToStringList(vAg["initiators"], &ok);
+        il = valueToStringList(vAg["initiators"]);
 
-        if( ok ) {
-
+        if( il ) {
             ag = lsmAccessGroupRecordAlloc(vAg["id"].asString().c_str(),
                                         vAg["name"].asString().c_str(),
                                         il,
                                         vAg["system_id"].asString().c_str());
-            if( !ag ) {
-                lsmStringListFree(il);
-                il = NULL;
-            }
+
+            /* Initiator list is copied in AccessroupRecordAlloc */
+            lsmStringListFree(il);
         }
     }
     return ag;
@@ -229,14 +218,51 @@ Value accessGroupToValue( lsmAccessGroupPtr group )
     return Value();
 }
 
+lsmAccessGroup **valueToAccessGroupList( Value &group, uint32_t *count )
+{
+    lsmAccessGroup **rc = NULL;
+    std::vector<Value> ag = group.asArray();
+
+    *count = ag.size();
+
+    if( *count ) {
+        rc = lsmAccessGroupRecordAllocArray(*count);
+        if( rc ) {
+            uint32_t i;
+            for(i = 0; i < *count; ++i ) {
+                rc[i] = valueToAccessGroup(ag[i]);
+                if( !rc[i] ) {
+                    lsmAccessGroupRecordFreeArray(rc, i);
+                    rc = NULL;
+                    break;
+                }
+            }
+        }
+    }
+    return rc;
+}
+
+Value accessGroupListToValue( lsmAccessGroupPtr *group, uint32_t count)
+{
+    std::vector<Value> rc;
+
+    if( group && count ) {
+        uint32_t i;
+        for( i = 0; i < count; ++i ) {
+            rc.push_back(accessGroupToValue(group[i]));
+        }
+    }
+    return rc;
+}
+
 lsmBlockRange *valueToBlockRange(Value &br)
 {
     lsmBlockRange *rc = NULL;
     if( isExpectedObject(br, "BlockRange") ) {
         std::map<std::string, Value> range = br.asObject();
 
-        rc = lsmBlockRangeRecordAlloc(range["source_start"].asUint64_t(),
-                                        range["dest_start"].asUint64_t(),
+        rc = lsmBlockRangeRecordAlloc(range["src_block"].asUint64_t(),
+                                        range["dest_block"].asUint64_t(),
                                         range["block_count"].asUint64_t());
     }
     return rc;
@@ -247,12 +273,43 @@ Value blockRangeToValue(lsmBlockRange *br)
     if( LSM_IS_BLOCK_RANGE(br) ) {
         std::map<std::string, Value> r;
         r["class"] = Value("BlockRange");
-        r["source_start"] = Value(br->source_start);
-        r["dest_start"] = Value(br->dest_start);
+        r["src_block"] = Value(br->source_start);
+        r["dest_block"] = Value(br->dest_start);
         r["block_count"] = Value(br->block_count);
         return r;
     }
     return Value();
+}
+
+lsmBlockRangePtr *valueToBlockRangeList(Value &brl, uint32_t *count)
+{
+    lsmBlockRangePtr *rc = NULL;
+    std::vector<Value> r = brl.asArray();
+    *count = r.size();
+    if( *count ) {
+        rc = lsmBlockRangeRecordAllocArray(*count);
+        if( rc ) {
+            for( uint32_t i = 0; i < *count; ++i ) {
+                rc[i] = valueToBlockRange(r[i]);
+                if( !rc[i] ) {
+                    lsmBlockRangeRecordFreeArray(rc, i);
+                    rc = NULL;
+                    break;
+                }
+            }
+        }
+    }
+    return rc;
+}
+
+Value blockRangeListToValue( lsmBlockRangePtr *brl, uint32_t count )
+{
+    uint32_t i = 0;
+    std::vector<Value> r;
+    for( i = 0; i < count; ++i ) {
+        r.push_back(blockRangeToValue(brl[i]));
+    }
+    return Value(r);
 }
 
 lsmFs *valueToFs(Value &fs)
@@ -316,7 +373,7 @@ lsmNfsExport *valueToNfsExport(Value &exp)
 {
     lsmNfsExport *rc = NULL;
     if( isExpectedObject(exp, "NfsExport") ) {
-        int ok = -1;
+        int ok = 0;
         lsmStringListPtr root = NULL;
         lsmStringListPtr rw = NULL;
         lsmStringListPtr ro = NULL;
@@ -324,16 +381,18 @@ lsmNfsExport *valueToNfsExport(Value &exp)
         std::map<std::string, Value> i = exp.asObject();
 
         /* Check all the arrays for successful allocation */
-        root = valueToStringList(i["root"], &ok);
-        if( ok ) {
-            rw = valueToStringList(i["rw"], &ok);
-            if( ok ) {
-                ro = valueToStringList(i["ro"], &ok);
-                if( !ok ) {
+        root = valueToStringList(i["root"]);
+        if( root ) {
+            rw = valueToStringList(i["rw"]);
+            if( rw ) {
+                ro = valueToStringList(i["ro"]);
+                if( !ro ) {
                     lsmStringListFree(rw);
                     lsmStringListFree(root);
                     rw = NULL;
                     root = NULL;
+                } else {
+                    ok = 1;
                 }
             } else {
                 lsmStringListFree(root);
@@ -354,6 +413,10 @@ lsmNfsExport *valueToNfsExport(Value &exp)
                 i["anongid"].asUint64_t(),
                 i["options"].asC_str()
                 );
+
+            lsmStringListFree(root);
+            lsmStringListFree(rw);
+            lsmStringListFree(ro);
         }
     }
     return rc;
@@ -378,4 +441,24 @@ Value nfsExportToValue(lsmNfsExport *exp)
     }
     return Value();
 
+}
+
+lsmStorageCapabilities *valueToCapabilities(Value &exp)
+{
+    lsmStorageCapabilities *rc = NULL;
+    if( isExpectedObject(exp, "Capabilities") ) {
+        const char *val = exp["cap"].asC_str();
+        rc = lsmCapabilityRecordAlloc(val);
+    }
+    return rc;
+}
+
+Value capabilitiesToValue(lsmStorageCapabilities *cap)
+{
+    std::map<std::string, Value> c;
+    char *t = capabilityString(cap);
+    c["class"] = Value("Capabilities");
+    c["cap"] = Value(t);
+    free(t);
+    return c;
 }

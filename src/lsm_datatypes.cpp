@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <glib.h>
 
 #ifdef  __cplusplus
 extern "C" {
@@ -49,19 +50,113 @@ extern "C" {
 
 #define LSM_DEFAULT_PLUGIN_DIR "/var/run/lsm/ipc"
 
+int lsmStringListAppend(lsmStringListPtr sl, const char *value)
+{
+	int rc = LSM_ERR_INVALID_SL;
+
+	if( LSM_IS_STRING_LIST(sl) ) {
+		char *d = strdup(value);
+		if(d) {
+			g_ptr_array_add(sl->values, d);
+			rc = LSM_ERR_OK;
+		} else {
+			rc = LSM_ERR_NO_MEMORY;
+		}
+	}
+	return rc;
+}
+
+int lsmStringListRemove(lsmStringListPtr sl, uint32_t index)
+{
+	int rc = LSM_ERR_INVALID_SL;
+
+	if( LSM_IS_STRING_LIST(sl) ) {
+		if( index < sl->values->len ) {
+			g_ptr_array_remove_index(sl->values, index);
+		} else {
+			rc = LSM_ERR_INDEX_BOUNDS;
+		}
+	}
+	return rc;
+}
+
+
+int lsmStringListSetElem(lsmStringListPtr sl, uint32_t index,
+                                            const char* value)
+{
+    int rc = LSM_ERR_OK;
+    if( LSM_IS_STRING_LIST(sl) ) {
+        if( index < sl->values->len ) {
+
+			char *i = (char *)g_ptr_array_index(sl->values, index);
+
+			if( i )	{
+				free(i);
+			}
+
+			g_ptr_array_index(sl->values, index) = strdup(value);
+
+            if( !g_ptr_array_index(sl->values, index) ) {
+                rc = LSM_ERR_NO_MEMORY;
+            }
+        } else {
+			g_ptr_array_set_size(sl->values, index + 1);
+			g_ptr_array_index(sl->values, index) = strdup(value);
+        }
+    } else {
+        rc = LSM_ERR_INVALID_SL;
+    }
+    return rc;
+}
+
+const char *lsmStringListGetElem(lsmStringListPtr sl, uint32_t index)
+{
+    if( LSM_IS_STRING_LIST(sl) ) {
+        if( index < sl->values->len ) {
+            return (const char*)g_ptr_array_index(sl->values, index);
+        }
+    }
+    return NULL;
+}
+
 lsmStringListPtr lsmStringListAlloc(uint32_t size)
 {
     lsmStringList *rc = NULL;
 
-    if( size ) {
-        size_t s = sizeof(lsmStringList) + (sizeof(char*) * size);
-        rc = (lsmStringList *)calloc(1, s);
-        if( rc ) {
-            rc->magic = LSM_STRING_LIST_MAGIC;
-            rc->size = size;
-        }
+    rc = (lsmStringList *)malloc(sizeof(lsmStringList));
+    if( rc ) {
+        rc->magic = LSM_STRING_LIST_MAGIC;
+        rc->values = g_ptr_array_sized_new(size);
+		if( !rc->values ) {
+			free(rc);
+			rc = NULL;
+		} else {
+            g_ptr_array_set_size(rc->values, size);
+			g_ptr_array_set_free_func(rc->values, free);
+		}
     }
+
     return rc;
+}
+
+int lsmStringListFree(lsmStringListPtr sl)
+{
+    if( LSM_IS_STRING_LIST(sl) ) {
+        sl->magic = LSM_DEL_MAGIC(LSM_STRING_LIST_MAGIC);
+        g_ptr_array_free(sl->values, TRUE);
+        sl->values = NULL;
+        free(sl);
+        return LSM_ERR_OK;
+    }
+    return LSM_ERR_INVALID_SL;
+}
+
+uint32_t lsmStringListSize(lsmStringListPtr sl)
+{
+    if( LSM_IS_STRING_LIST(sl) ) {
+        return (uint32_t)sl->values->len;
+    }
+    return 0;
 }
 
 lsmStringListPtr lsmStringListCopy(lsmStringListPtr src)
@@ -69,11 +164,13 @@ lsmStringListPtr lsmStringListCopy(lsmStringListPtr src)
     lsmStringList *dest = NULL;
 
     if( LSM_IS_STRING_LIST(src) ) {
-        dest = lsmStringListAlloc(src->size);
+        dest = lsmStringListAlloc(lsmStringListSize(src));
 
         if( dest ) {
             uint32_t i;
-            for( i = 0; i < src->size ; ++i ) {
+			uint32_t size = lsmStringListSize(src);
+
+            for( i = 0; i < size ; ++i ) {
                 if ( LSM_ERR_OK != lsmStringListSetElem(dest, i,
                         lsmStringListGetElem(src, i))) {
                     /** We had an allocation failure setting an element item */
@@ -85,62 +182,6 @@ lsmStringListPtr lsmStringListCopy(lsmStringListPtr src)
         }
     }
     return dest;
-}
-
-int lsmStringListFree(lsmStringListPtr sl)
-{
-    if( LSM_IS_STRING_LIST(sl) ) {
-        uint32_t i;
-        for(i = 0; i < sl->size; ++i ) {
-            free(sl->values[i]);
-            sl->values[i] = '\0';
-        }
-        sl->magic = LSM_DEL_MAGIC(LSM_STRING_LIST_MAGIC);
-        free(sl);
-        return LSM_ERR_OK;
-    }
-    return LSM_ERR_INVALID_SL;
-}
-
-int lsmStringListSetElem(lsmStringListPtr sl, uint32_t index,
-                                            const char* value)
-{
-    int rc = LSM_ERR_OK;
-    if( LSM_IS_STRING_LIST(sl) ) {
-        if( index < sl->size ) {
-            if( sl->values[index] ) {
-                //There is a value here, free it!
-                free(sl->values[index]);
-            }
-            sl->values[index] = strdup(value);
-            if( !sl->values[index] ) {
-                rc = LSM_ERR_NO_MEMORY;
-            }
-        } else {
-            rc = LSM_ERR_INDEX_BOUNDS;
-        }
-    } else {
-        rc = LSM_ERR_INVALID_SL;
-    }
-    return rc;
-}
-
-const char *lsmStringListGetElem(lsmStringListPtr sl, uint32_t index)
-{
-    if( LSM_IS_STRING_LIST(sl) ) {
-        if( index < sl->size ) {
-            return sl->values[index];
-        }
-    }
-    return NULL;
-}
-
-uint32_t lsmStringListSize(lsmStringListPtr sl)
-{
-    if( LSM_IS_STRING_LIST(sl) ) {
-        return sl->size;
-    }
-    return 0;
 }
 
 lsmConnectPtr getConnection()
@@ -185,7 +226,8 @@ void freeConnection(lsmConnectPtr c)
 }
 
 static int establishConnection( lsmConnectPtr c, const char * password,
-                                uint32_t timeout, lsmErrorPtr *e)
+                                uint32_t timeout, lsmErrorPtr *e,
+                                lsmFlag_t flags)
 {
     int rc = LSM_ERR_OK;
     std::map<std::string, Value> params;
@@ -199,15 +241,16 @@ static int establishConnection( lsmConnectPtr c, const char * password,
             params["password"] = Value();
         }
         params["timeout"] = Value(timeout);
+        params["flags"] = Value(flags);
         Value p(params);
 
         c->tp->rpc("startup", p);
     } catch (const ValueException &ve) {
-        *e = lsmErrorCreate(LSM_ERR_TRANS_PORT_SERIALIZATION,
+        *e = lsmErrorCreate(LSM_ERR_TRANSPORT_SERIALIZATION,
                                 LSM_ERR_DOMAIN_FRAME_WORK,
                                 LSM_ERR_LEVEL_ERROR, "Error in serialization",
                                 ve.what(), NULL, NULL, 0 );
-        rc = LSM_ERR_TRANS_PORT_SERIALIZATION;
+        rc = LSM_ERR_TRANSPORT_SERIALIZATION;
     } catch (const LsmException &le) {
         *e = lsmErrorCreate(LSM_ERR_TRANSPORT_COMMUNICATION,
                                 LSM_ERR_DOMAIN_FRAME_WORK,
@@ -226,7 +269,7 @@ static int establishConnection( lsmConnectPtr c, const char * password,
 
 
 int loadDriver(lsmConnectPtr c, xmlURIPtr uri, const char *password,
-    uint32_t timeout, lsmErrorPtr *e)
+    uint32_t timeout, lsmErrorPtr *e, lsmFlag_t flags)
 {
     int rc = LSM_ERR_OK;
 
@@ -247,7 +290,7 @@ int loadDriver(lsmConnectPtr c, xmlURIPtr uri, const char *password,
 
         if( sd >= 0 ) {
             c->tp = new Ipc(sd);
-            if( establishConnection(c, password, timeout, e)) {
+            if( establishConnection(c, password, timeout, e, flags)) {
                 rc = LSM_ERR_PLUGIN_DLOPEN;
             }
         } else {
@@ -420,7 +463,7 @@ rtype *name(uint32_t size)                  \
 #define CREATE_FREE_ARRAY_FUNC(name, free_func, record_type)\
 void name( record_type pa[], uint32_t size)                \
 {                                                   \
-    if (pa && size) {                               \
+    if (pa) {                                       \
         uint32_t i = 0;                             \
         for (i = 0; i < size; ++i) {                \
             free_func(pa[i]);                       \
@@ -454,6 +497,13 @@ lsmPoolPtr lsmPoolRecordAlloc(const char *id, const char *name,
         }
     }
     return rc;
+}
+
+void lsmPoolFreeSpaceSet(lsmPoolPtr p, uint64_t free_space)
+{
+    if( LSM_IS_POOL(p) ) {
+        p->freeSpace = free_space;
+    }
 }
 
 lsmPoolPtr lsmPoolRecordCopy( lsmPoolPtr toBeCopied)
@@ -625,13 +675,15 @@ lsmVolumePtr lsmVolumeRecordAlloc(const char *id, const char *name,
 
 CREATE_ALLOC_ARRAY_FUNC(lsmSystemRecordAllocArray, lsmSystemPtr)
 
-lsmSystemPtr lsmSystemRecordAlloc( const char *id, const char *name)
+lsmSystemPtr lsmSystemRecordAlloc( const char *id, const char *name,
+                                    uint32_t status)
 {
     lsmSystemPtr rc = (lsmSystemPtr)malloc(sizeof(lsmSystem));
     if (rc) {
         rc->magic = LSM_SYSTEM_MAGIC;
         rc->id = strdup(id);
         rc->name = strdup(name);
+        rc->status = status;
         if( !rc->name || !rc->id ) {
             free(rc->name);
             free(rc->id);
@@ -657,7 +709,7 @@ lsmSystemPtr lsmSystemRecordCopy(lsmSystemPtr s)
 {
     lsmSystemPtr rc = NULL;
     if( LSM_IS_SYSTEM(s) ) {
-        rc = lsmSystemRecordAlloc(s->id, s->name);
+        rc = lsmSystemRecordAlloc(s->id, s->name, s->status);
     }
     return rc;
 }
@@ -676,6 +728,14 @@ const char *lsmSystemNameGet(lsmSystemPtr s)
         return s->name;
     }
     return NULL;
+}
+
+uint32_t lsmSystemStatusGet(lsmSystemPtr s)
+{
+    if( LSM_IS_SYSTEM(s) ) {
+        return s->status;
+    }
+    return UINT32_MAX;
 }
 
 lsmVolumePtr lsmVolumeRecordCopy(lsmVolumePtr vol)
@@ -786,7 +846,7 @@ uint32_t lsmVolumeOpStatusGet(lsmVolumePtr v)
     MEMBER_GET(v, LSM_IS_VOL, status, 0);
 }
 
-char LSM_DLL_EXPORT *lsmVolumeGetSystemIdGet( lsmVolumePtr v)
+char LSM_DLL_EXPORT *lsmVolumeSystemIdGet( lsmVolumePtr v)
 {
     MEMBER_GET(v, LSM_IS_VOL, system_id, NULL);
 }
@@ -874,6 +934,19 @@ lsmStringListPtr lsmAccessGroupInitiatorIdGet( lsmAccessGroupPtr group )
         return group->initiators;
     }
     return NULL;
+}
+
+void LSM_DLL_EXPORT lsmAccessGroupInitiatorIdSet(
+                                        lsmAccessGroupPtr group,
+                                        lsmStringListPtr il)
+{
+    if( LSM_IS_ACCESS_GROUP(group) ) {
+        if( group->initiators ) {
+            lsmStringListFree(group->initiators);
+        }
+
+        group->initiators = il;
+    }
 }
 
 lsmErrorPtr lsmErrorGetLast(lsmConnectPtr c)
@@ -1044,6 +1117,17 @@ lsmSsPtr lsmSsRecordAlloc( const char *id, const char *name,
     return rc;
 }
 
+lsmSsPtr lsmSsRecordCopy(lsmSsPtr source)
+{
+    lsmSsPtr rc = NULL;
+    if( LSM_IS_SS(source) ) {
+        rc = lsmSsRecordAlloc(  lsmSsIdGet(source),
+                                lsmSsNameGet(source),
+                                lsmSsTimeStampGet(source));
+    }
+    return rc;
+}
+
 void lsmSsRecordFree( lsmSsPtr ss)
 {
     if( LSM_IS_SS(ss) ) {
@@ -1056,7 +1140,6 @@ void lsmSsRecordFree( lsmSsPtr ss)
 
 CREATE_ALLOC_ARRAY_FUNC(lsmSsRecordAllocArray, lsmSsPtr)
 CREATE_FREE_ARRAY_FUNC(lsmSsRecordFreeArray, lsmSsRecordFree, lsmSsPtr)
-
 
 const char *lsmSsIdGet(lsmSsPtr ss)
 {
@@ -1118,20 +1201,26 @@ void lsmNfsExportRecordFree( lsmNfsExportPtr exp )
         exp->magic = LSM_DEL_MAGIC(LSM_NFS_EXPORT_MAGIC);
         free(exp->id);
         free(exp->fs_id);
+        free(exp->export_path);
         free(exp->auth_type);
         lsmStringListFree(exp->root);
         lsmStringListFree(exp->rw);
         lsmStringListFree(exp->ro);
         free(exp->options);
+
+        free(exp);
     }
 }
 
 
 lsmNfsExportPtr lsmNfsExportRecordCopy( lsmNfsExportPtr s )
 {
-    return lsmNfsExportRecordAlloc(s->id, s->fs_id, s->export_path,
-                            s->auth_type, s->root, s->rw, s->ro, s->anonuid,
-                            s->anongid, s->options);
+    if(LSM_IS_NFS_EXPORT(s)) {
+        return lsmNfsExportRecordAlloc(s->id, s->fs_id, s->export_path,
+                                s->auth_type, s->root, s->rw, s->ro, s->anonuid,
+                                s->anongid, s->options);
+    }
+    return NULL;
 }
 
 CREATE_ALLOC_ARRAY_FUNC(lsmNfsExportRecordAllocArray, lsmNfsExportPtr)
@@ -1246,6 +1335,155 @@ int lsmNfsExportOptionsSet( lsmNfsExportPtr exp, const char *value )
 {
     MEMBER_SET_REF(exp, LSM_IS_NFS_EXPORT, options, value, strdup, free,
                 LSM_ERR_INVALID_NFS);
+}
+
+lsmCapabilityValueType lsmCapabilityGet(lsmStorageCapabilitiesPtr cap,
+                                        lsmCapabilityType t)
+{
+    lsmCapabilityValueType rc = LSM_CAPABILITY_UNKNOWN;
+
+    if( LSM_IS_CAPABILITIY(cap) && (uint32_t)t < cap->len ) {
+        rc = (lsmCapabilityValueType)cap->cap[t];
+    }
+    return rc;
+}
+
+int lsmCapabilitySet(lsmStorageCapabilitiesPtr cap, lsmCapabilityType t,
+                        lsmCapabilityValueType v)
+{
+    int rc = LSM_ERR_INVALID_ARGUMENT;
+
+    if( !LSM_IS_CAPABILITIY(cap) ) {
+        return LSM_ERR_INVALID_CAPABILITY;
+    }
+
+    if( (uint32_t)t < cap->len) {
+        cap->cap[t] = v;
+        rc = LSM_ERR_OK;
+    }
+    return rc;
+}
+
+int lsmCapabilitySetN( lsmStorageCapabilitiesPtr cap,
+                                lsmCapabilityValueType v, uint32_t number,
+                                ... )
+{
+    uint32_t i = 0;
+    int rc = LSM_ERR_OK;
+
+    if( !LSM_IS_CAPABILITIY(cap) ) {
+        return LSM_ERR_INVALID_CAPABILITY;
+    }
+
+    if( number ) {
+        va_list var_arg;
+
+        va_start(var_arg, number);
+
+        for( i = 0; i < number; ++i ) {
+            int index = va_arg(var_arg, int);
+
+            if( index < (int)cap->len ) {
+                cap->cap[index] = v;
+            } else {
+                rc = LSM_ERR_INVALID_ARGUMENT;
+                break;
+            }
+        }
+
+        va_end(var_arg);
+    }
+
+    return rc;
+}
+
+static char* bytesToString(uint8_t *a, uint32_t len)
+{
+	char *buff = NULL;
+
+	if( a && len ) {
+		uint32_t i = 0;
+		char *tmp = NULL;
+		size_t str_len = ((sizeof(char) * 2) * len + 1);
+		buff = (char*)malloc(str_len);
+
+		if( buff ) {
+			tmp = buff;
+			for( i = 0; i < len; ++i ) {
+				tmp += sprintf(tmp, "%02x", a[i]);
+			}
+			buff[str_len - 1] = '\0';
+		}
+	}
+	return buff;
+}
+
+static uint8_t *stringToBytes(const char *hex_string, uint32_t *l)
+{
+	uint8_t *rc = NULL;
+
+	if( hex_string && l ) {
+		size_t len = strlen(hex_string);
+		if( len && (len % 2) == 0) {
+			len /= 2;
+			rc = (uint8_t*)malloc( sizeof(uint8_t) * len);
+			if( rc ) {
+				size_t i;
+				const char *t = hex_string;
+				*l = len;
+
+				for( i = 0; i < len; ++i ) {
+					sscanf(t, "%02hhx", &rc[i]);
+					t += 2;
+				}
+			}
+		}
+	}
+	return rc;
+}
+
+
+lsmStorageCapabilitiesPtr lsmCapabilityRecordAlloc(const char *value)
+{
+    lsmStorageCapabilitiesPtr rc = NULL;
+    rc = (lsmStorageCapabilitiesPtr)malloc(sizeof(struct _lsmStorageCapabilities));
+    if(rc) {
+        rc->magic = LSM_CAPABILITIES_MAGIC;
+
+        if( value ) {
+            rc->cap = stringToBytes(value, &rc->len);
+        } else {
+            rc->cap = (uint8_t *)malloc(sizeof(uint8_t) * LSM_CAP_MAX);
+            if( rc->cap ) {
+                rc->len = LSM_CAP_MAX;
+                memset(rc->cap, 0, sizeof(uint8_t) * LSM_CAP_MAX);
+            }
+        }
+
+        if( !rc->cap ) {
+            lsmCapabilityRecordFree(rc);
+            rc = NULL;
+        }
+    }
+    return rc;
+}
+
+void lsmCapabilityRecordFree(lsmStorageCapabilitiesPtr cap)
+{
+    if( LSM_IS_CAPABILITIY(cap) ) {
+        cap->magic = LSM_DEL_MAGIC(LSM_CAPABILITIES_MAGIC);
+        free(cap->cap);
+        free(cap);
+    }
+}
+
+char* capabilityString(lsmStorageCapabilitiesPtr c)
+{
+    char *rc = NULL;
+    if( LSM_IS_CAPABILITIY(c) ) {
+        rc = bytesToString(c->cap, c->len);
+    }
+    return rc;
 }
 
 #ifdef  __cplusplus

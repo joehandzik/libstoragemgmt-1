@@ -23,6 +23,7 @@
 #include <libstoragemgmt/libstoragemgmt_plug_interface.h>
 #include <libstoragemgmt/libstoragemgmt_common.h>
 #include <libxml/uri.h>
+#include <glib.h>
 #include "lsm_ipc.hpp"
 
 
@@ -77,12 +78,6 @@ struct LSM_DLL_LOCAL _lsmInitiator {
     lsmInitiatorType   idType;  /**< Type of id */
     char *id;                   /**< Identifier */
     char *name;                 /**< Initiator name */
-};
-
-/**
- * Capabilities of the plug-in and storage array.
- */
-struct _lsmStorageCapabilities {
 };
 
 #define LSM_ACCESS_GROUP_MAGIC  0xAA7A0003
@@ -161,6 +156,20 @@ struct _lsmBlockRange {
     uint64_t block_count;
 };
 
+#define LSM_CAPABILITIES_MAGIC  0xAA7A0008
+#define LSM_IS_CAPABILITIY(obj)    MAGIC_CHECK(obj, LSM_CAPABILITIES_MAGIC)
+
+#define LSM_CAP_MAX 512
+
+/**
+ * Capabilities of the plug-in and storage array.
+ */
+struct _lsmStorageCapabilities {
+    uint32_t magic;
+    uint32_t len;
+    uint8_t *cap;
+};
+
 #define LSM_SYSTEM_MAGIC  0xAA7A0009
 #define LSM_IS_SYSTEM(obj)    MAGIC_CHECK(obj, LSM_SYSTEM_MAGIC)
 
@@ -171,6 +180,7 @@ struct _lsmSystem {
     uint32_t magic;
     char *id;
     char *name;
+    uint32_t status;
 };
 
 #define LSM_CONNECT_MAGIC       0xAA7A000A
@@ -193,9 +203,9 @@ struct LSM_DLL_LOCAL _lsmPlugin {
     lsmPluginRegister   reg;            /**< Plug-in registration */
     lsmPluginUnregister unreg;          /**< Plug-in unregistration */
     struct lsmMgmtOps    *mgmtOps;      /**< Callback for management ops */
-    struct lsmSanOps    *sanOps;        /**< Callbacks for SAN ops */
-    struct lsmNasOps    *nasOps;        /**< Callbacks for NAS ops */
-    struct lsmFsOps     *fsOps;         /**< Callbacks for fs ops */
+    struct lsmSanOpsV1    *sanOps;        /**< Callbacks for SAN ops */
+    struct lsmNasOpsV1    *nasOps;        /**< Callbacks for NAS ops */
+    struct lsmFsOpsV1     *fsOps;         /**< Callbacks for fs ops */
 };
 
 
@@ -239,8 +249,7 @@ struct LSM_DLL_LOCAL _lsmError {
 #define LSM_IS_STRING_LIST(obj)     MAGIC_CHECK(obj, LSM_STRING_LIST_MAGIC)
 struct LSM_DLL_LOCAL _lsmStringList {
     uint32_t    magic;          /**< Magic value */
-    uint32_t    size;          /**< Number of elements */
-    char *values[0];
+    GPtrArray   *values;
 };
 
 #define LSM_FS_MAGIC                0xAA7A000E
@@ -283,11 +292,14 @@ LSM_DLL_LOCAL void freeConnection(lsmConnectPtr c);
  * @param password      Password
  * @param timeout       Initial timeout
  * @param e             Error data
+ * @param flags         Reserved flag for future use
  * @return LSM_ERR_OK on success, else error code.
  */
 LSM_DLL_LOCAL int loadDriver(lsmConnectPtr c, xmlURIPtr uri,
                                 const char *password, uint32_t timeout,
-                                lsmErrorPtr *e);
+                                lsmErrorPtr *e, lsmFlag_t flags);
+
+LSM_DLL_LOCAL char* capabilityString(lsmStorageCapabilitiesPtr c);
 
 #ifdef  __cplusplus
 }

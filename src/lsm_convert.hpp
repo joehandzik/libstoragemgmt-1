@@ -28,7 +28,7 @@
  * @param list      List represented as an vector of strings.
  * @return lsmStringList pointer, NULL on error.
  */
-lsmStringList *valueToStringList( std::vector<Value> &list );
+lsmStringList *valueToStringList( Value &list);
 
 /**
  * Converts a lsmStringList to a Value
@@ -108,6 +108,23 @@ lsmAccessGroup *valueToAccessGroup(Value &group);
 Value accessGroupToValue(lsmAccessGroupPtr group);
 
 /**
+ * Converts an access group list to an array of access group pointers
+ * @param[in] group         Value representing a std::vector of access groups
+ * @param[out] count         Number of items in the returned array.
+ * @return NULL on memory allocation failure, else pointer to access group
+ *          array.
+ */
+lsmAccessGroup **valueToAccessGroupList( Value &group, uint32_t *count );
+
+/**
+ * Converts an array of lsmAccessGroupPtr to Value(s)
+ * @param group             Pointer to an array of lsmAccessGroupPtr
+ * @param count             Number of items in array.
+ * @return std::vector of Values representing access groups
+ */
+Value accessGroupListToValue( lsmAccessGroupPtr *group, uint32_t count);
+
+/**
  * Converts a Value to a lsmBlockRange
  * @param br        Value representing a block range
  * @return lsmBlockRangePtr
@@ -120,6 +137,22 @@ lsmBlockRange *valueToBlockRange(Value &br);
  * @return Value, null value type on error
  */
 Value blockRangeToValue(lsmBlockRange *br);
+
+/**
+ * Converts a Value to an array of lsmBlockRangePtr
+ * @param[in] brl           Value representing block range(s)
+ * @param[out] count        Number of items in the resulting array
+ * @return NULL on memory allocation failure, else array of lsmBlockRangePtr
+ */
+lsmBlockRangePtr *valueToBlockRangeList(Value &brl,  uint32_t *count);
+
+/**
+ * Converts an array of lsmBlockRangePtr to Value
+ * @param brl           An array of lsmBlockRangePtr
+ * @param count         Number of items in input
+ * @return Value
+ */
+Value blockRangeListToValue( lsmBlockRangePtr *brl, uint32_t count);
 
 /**
  * Converts a value to a lsmFs *
@@ -144,7 +177,7 @@ lsmSs *valueToSs(Value &ss);
 
 /**
  * Converts a lsmSs pointer to a Value
- * @param fs        Snapshot pointer to convert
+ * @param ss        Snapshot pointer to convert
  * @return Value
  */
 Value ssToValue(lsmSs *ss);
@@ -162,5 +195,19 @@ lsmNfsExport *valueToNfsExport(Value &exp);
  * @return Value
  */
 Value nfsExportToValue(lsmNfsExport *exp);
+
+/**
+ * Converts a Value to a lsmCapabilites
+ * @param exp       Value representing a lsmCapabilities
+ * @return lsmCapabilities pointer or NULL on error
+ */
+lsmStorageCapabilities *valueToCapabilities(Value &exp);
+
+/**
+ * Converts a lsmCapabilites to a value
+ * @param cap       lsmCapabilites to convert to value
+ * @return Value
+ */
+Value capabilitiesToValue(lsmStorageCapabilities *cap);
 
 #endif
