@@ -163,7 +163,6 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
-U = @U@
 VERSION = @VERSION@
 YAJL_LIBS = @YAJL_LIBS@
 abs_builddir = @abs_builddir@
@@ -224,7 +223,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-dist_bin_SCRIPTS = lsmd sim_lsmplugin ontap_lsmplugin smispy_lsmplugin targetd_lsmplugin
+dist_bin_SCRIPTS = sim_lsmplugin ontap_lsmplugin smispy_lsmplugin targetd_lsmplugin nstor_lsmplugin v7k_lsmplugin
 lsmdir = $(pythondir)/lsm
 externaldir = $(lsmdir)/external
 lsm_PYTHON = lsm/__init__.py           \
@@ -232,14 +231,17 @@ lsm_PYTHON = lsm/__init__.py           \
                    lsm/cmdline.py      \
                    lsm/common.py       \
                    lsm/data.py         \
+                   lsm/eseries.py      \
                    lsm/iplugin.py      \
                    lsm/na.py           \
                    lsm/ontap.py        \
                    lsm/pluginrunner.py \
                    lsm/simulator.py    \
                    lsm/smis.py         \
+                   lsm/smisproxy.py    \
                    lsm/transport.py    \
-                   lsm/version.py
+                   lsm/version.py      \
+                   lsm/ibmv7k.py
 
 external_PYTHON = lsm/external/__init__.py     \
                    lsm/external/daemon.py      \

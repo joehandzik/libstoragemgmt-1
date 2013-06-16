@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Red Hat, Inc.
+ * Copyright (C) 2011-2013 Red Hat, Inc.
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -27,32 +27,29 @@
 extern "C" {
 #endif
 
-/**
- * Severity of the error.
- */
+/** @file libstoragemgmt_error.h */
+
+/**< \enum  lsmErrorLevel Severity of the error. */
 typedef enum  {
     LSM_ERR_LEVEL_NONE = 0,
     LSM_ERR_LEVEL_WARNING = 1,
     LSM_ERR_LEVEL_ERROR = 2
 } lsmErrorLevel;
 
-/*
- * Where the error took place
- */
+/**< \enum lsmErrorDomain Where the error took place */
 typedef enum  {
-    LSM_ERR_DOMAIN_FRAME_WORK = 0,
-    LSM_ERR_DOMAIN_PLUG_IN = 1
+    LSM_ERR_DOMAIN_FRAME_WORK = 0,      /**< Frame work */
+    LSM_ERR_DOMAIN_PLUG_IN = 1          /**< Plug-in */
 } lsmErrorDomain;
 
-/**
- * Possible enumerated return codes from library
- */
+/**< \enum lsmErrorNumber Possible enumerated return codes from library */
 typedef enum {
     LSM_ERR_OK = 0,                     /**< OK */
     LSM_ERR_INTERNAL_ERROR = 1,         /**< Internal error */
     LSM_ERR_JOB_STARTED = 7,            /**< Operation has started */
     LSM_ERR_INDEX_BOUNDS = 10,          /**< Out of bounds on string index */
     LSM_ERR_TIMEOUT = 11,               /**< Plug-in is un-responsive */
+    LSM_ERR_DAEMON_NOT_RUNNING = 12,    /**< Daemon is not running */
 
     LSM_ERR_EXISTS_ACCESS_GROUP = 50,   /**< Access group exists */
     LSM_ERR_EXISTS_FS = 51,             /**< FS exists */
@@ -114,6 +111,7 @@ typedef enum {
     LSM_ERR_PLUGIN_REGISTRATION = 308,  /**< Error during plug-in registration */
     LSM_ERR_PLUGIN_UNKNOWN_HOST = 309,  /**< Name resolution failed */
     LSM_ERR_PLUGIN_TIMEOUT = 310,       /**< Plug-in timed out talking to array */
+    LSM_ERR_PLUGIN_NOT_EXIST = 311,     /**< Plug-in does not appear to exist */
 
     LSM_ERR_SIZE_INSUFFICIENT_SPACE = 350,  /**< Insufficient space */
     LSM_ERR_VOLUME_SAME_SIZE = 351,         /**< Trying to resize to same size */
@@ -140,7 +138,7 @@ typedef lsmError *lsmErrorPtr;
  * @param c      Connection pointer.
  * @return lsmErrorPtr, Null if no error exists!
  */
-lsmErrorPtr LSM_DLL_EXPORT lsmErrorGetLast(lsmConnectPtr c);
+lsmErrorPtr LSM_DLL_EXPORT lsmErrorGetLast(lsmConnect *c);
 
 /**
  * Frees the error record!

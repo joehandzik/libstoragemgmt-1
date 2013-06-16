@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Red Hat, Inc.
+ * Copyright (C) 2011-2013 Red Hat, Inc.
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -47,7 +47,8 @@ lsmVolume *valueToVolume(Value &vol)
             v["block_size"].asUint64_t(),
             v["num_of_blocks"].asUint64_t(),
             v["status"].asUint32_t(),
-            v["system_id"].asString().c_str());
+            v["system_id"].asString().c_str(),
+            v["pool_id"].asString().c_str());
     }
 
     return rc;
@@ -65,6 +66,7 @@ Value volumeToValue(lsmVolume *vol)
     v["num_of_blocks"] = Value(vol->numberOfBlocks);
     v["status"] = Value(vol->status);
     v["system_id"] = Value(vol->system_id);
+    v["pool_id"] = Value(vol->pool_id);
     return Value(v);
 }
 
@@ -112,14 +114,17 @@ lsmPool *valueToPool(Value &pool)
 
 Value poolToValue(lsmPool *pool)
 {
-    std::map<std::string, Value> p;
-    p["class"] = Value("Pool");
-    p["id"] = Value(pool->id);
-    p["name"] = Value(pool->name);
-    p["total_space"] = Value(pool->totalSpace);
-    p["free_space"] = Value(pool->freeSpace);
-    p["system_id"] = Value(pool->system_id);
-    return Value(p);
+    if( LSM_IS_POOL(pool) ) {
+        std::map<std::string, Value> p;
+        p["class"] = Value("Pool");
+        p["id"] = Value(pool->id);
+        p["name"] = Value(pool->name);
+        p["total_space"] = Value(pool->totalSpace);
+        p["free_space"] = Value(pool->freeSpace);
+        p["system_id"] = Value(pool->system_id);
+        return Value(p);
+    }
+    return Value();
 }
 
 lsmSystem *valueToSystem(Value &system)
@@ -204,7 +209,7 @@ lsmAccessGroup *valueToAccessGroup( Value &group )
     return ag;
 }
 
-Value accessGroupToValue( lsmAccessGroupPtr group )
+Value accessGroupToValue( lsmAccessGroup *group )
 {
     if( LSM_IS_ACCESS_GROUP(group) ) {
         std::map<std::string, Value> ag;
@@ -242,7 +247,7 @@ lsmAccessGroup **valueToAccessGroupList( Value &group, uint32_t *count )
     return rc;
 }
 
-Value accessGroupListToValue( lsmAccessGroupPtr *group, uint32_t count)
+Value accessGroupListToValue( lsmAccessGroup **group, uint32_t count)
 {
     std::vector<Value> rc;
 
@@ -281,9 +286,9 @@ Value blockRangeToValue(lsmBlockRange *br)
     return Value();
 }
 
-lsmBlockRangePtr *valueToBlockRangeList(Value &brl, uint32_t *count)
+lsmBlockRange **valueToBlockRangeList(Value &brl, uint32_t *count)
 {
-    lsmBlockRangePtr *rc = NULL;
+    lsmBlockRange **rc = NULL;
     std::vector<Value> r = brl.asArray();
     *count = r.size();
     if( *count ) {
@@ -302,7 +307,7 @@ lsmBlockRangePtr *valueToBlockRangeList(Value &brl, uint32_t *count)
     return rc;
 }
 
-Value blockRangeListToValue( lsmBlockRangePtr *brl, uint32_t count )
+Value blockRangeListToValue( lsmBlockRange **brl, uint32_t count )
 {
     uint32_t i = 0;
     std::vector<Value> r;
@@ -374,9 +379,9 @@ lsmNfsExport *valueToNfsExport(Value &exp)
     lsmNfsExport *rc = NULL;
     if( isExpectedObject(exp, "NfsExport") ) {
         int ok = 0;
-        lsmStringListPtr root = NULL;
-        lsmStringListPtr rw = NULL;
-        lsmStringListPtr ro = NULL;
+        lsmStringList *root = NULL;
+        lsmStringList *rw = NULL;
+        lsmStringList *ro = NULL;
 
         std::map<std::string, Value> i = exp.asObject();
 

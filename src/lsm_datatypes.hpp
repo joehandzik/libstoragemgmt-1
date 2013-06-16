@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Red Hat, Inc.
+ * Copyright (C) 2011-2013 Red Hat, Inc.
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -38,6 +38,10 @@ extern "C" {
 #define LSM_VOL_MAGIC       0xAA7A0000
 #define LSM_IS_VOL(obj)     MAGIC_CHECK(obj, LSM_VOL_MAGIC)
 
+#define LSM_FLAG_UNUSED_CHECK(x) ( x != 0 )
+#define LSM_FLAG_GET_VALUE(x) x["flags"].asUint64_t()
+#define LSM_FLAG_EXPECTED_TYPE(x) (Value::numeric_t == x["flags"].valueType())
+
 /**
  * Information about storage volumes.
  */
@@ -49,7 +53,8 @@ struct LSM_DLL_LOCAL _lsmVolume {
     uint64_t    blockSize;              /**< Block size */
     uint64_t    numberOfBlocks;         /**< Number of blocks */
     uint32_t    status;                 /**< Status */
-    char *system_id;
+    char *system_id;                    /**< System this volume belongs */
+    char *pool_id;                      /**< Pool this volume is derived from */
 };
 
 #define LSM_POOL_MAGIC       0xAA7A0001
@@ -64,7 +69,7 @@ struct LSM_DLL_LOCAL _lsmPool {
     char *name;                 /**< Human recognizeable name */
     uint64_t    totalSpace;     /**< Total size */
     uint64_t    freeSpace;      /**< Free space available */
-    char *system_id;
+    char *system_id;            /**< system id */
 };
 
 
@@ -87,11 +92,11 @@ struct LSM_DLL_LOCAL _lsmInitiator {
  * Information pertaining to a storage group.
  */
 struct _lsmAccessGroup {
-    uint32_t magic;
-    char *id;
-    char *name;
-    char *system_id;
-    lsmStringList *initiators;
+    uint32_t magic;             /**< Used for verification */
+    char *id;                   /**< Id */
+    char *name;                 /**< Name */
+    char *system_id;            /**< System id */
+    lsmStringList *initiators;  /**< List of initiators */
 };
 
 #define LSM_FILE_SYSTEM_MAGIC  0xAA7A0004
@@ -101,13 +106,13 @@ struct _lsmAccessGroup {
  * Structure for file systems
  */
 struct _lsmFileSystem {
-    uint32_t magic;
-    char *id;
-    char *name;
-    uint64_t total_space;
-    uint64_t free_space;
-    char *pool_id;
-    char *system_id;
+    uint32_t magic;             /**< Used for verification */
+    char *id;                   /**< Id */
+    char *name;                 /**< Name */
+    uint64_t total_space;       /**< Total space */
+    uint64_t free_space;        /**< Free space */
+    char *pool_id;              /**< Pool ID */
+    char *system_id;            /**< System ID */
 };
 
 #define LSM_SNAP_SHOT_MAGIC  0xAA7A0005
@@ -117,10 +122,10 @@ struct _lsmFileSystem {
  * Structure for snapshots.
  */
 struct _lsmSnapShot {
-    uint32_t magic;
-    char *id;
-    char *name;
-    uint64_t ts;
+    uint32_t magic;             /**< Used for verification */
+    char *id;                   /**< Id */
+    char *name;                 /**< Name */
+    uint64_t ts;                /**< Time stamp */
 };
 
 #define LSM_NFS_EXPORT_MAGIC  0xAA7A0006
@@ -130,17 +135,17 @@ struct _lsmSnapShot {
  * Structure for NFS export information
  */
 struct _lsmNfsExport {
-    uint32_t magic;
-    char *id;
-    char *fs_id;
-    char *export_path;
-    char *auth_type;
-    lsmStringList *root;
-    lsmStringList *rw;
-    lsmStringList *ro;
-    uint64_t anonuid;
-    uint64_t anongid;
-    char *options;
+    uint32_t magic;             /**< Used for verfication */
+    char *id;                   /**< Id */
+    char *fs_id;                /**< File system id */
+    char *export_path;          /**< Export path */
+    char *auth_type;            /**< Supported authentication types */
+    lsmStringList *root;        /**< List of hosts with root access */
+    lsmStringList *rw;          /**< List of hosts with read & write access */
+    lsmStringList *ro;          /**< List of hosts with read only access */
+    uint64_t anonuid;           /**< Uid that should map to anonymous */
+    uint64_t anongid;           /**< Gid that should map to anonymous */
+    char *options;              /**< Options */
 };
 
 #define LSM_BLOCK_RANGE_MAGIC       0xAA7A0007
@@ -150,10 +155,10 @@ struct _lsmNfsExport {
  * Structure for block range ( a region to be replicated )
  */
 struct _lsmBlockRange {
-    uint32_t magic;
-    uint64_t source_start;
-    uint64_t dest_start;
-    uint64_t block_count;
+    uint32_t magic;             /**< Used for verification */
+    uint64_t source_start;      /**< Source address */
+    uint64_t dest_start;        /**< Dest address */
+    uint64_t block_count;       /**< Number of blocks */
 };
 
 #define LSM_CAPABILITIES_MAGIC  0xAA7A0008
@@ -165,9 +170,9 @@ struct _lsmBlockRange {
  * Capabilities of the plug-in and storage array.
  */
 struct _lsmStorageCapabilities {
-    uint32_t magic;
-    uint32_t len;
-    uint8_t *cap;
+    uint32_t magic;             /**< Used for verification */
+    uint32_t len;               /**< Len of cap field */
+    uint8_t *cap;               /**< Capacity data */
 };
 
 #define LSM_SYSTEM_MAGIC  0xAA7A0009
@@ -177,10 +182,10 @@ struct _lsmStorageCapabilities {
  * Structure for a system
  */
 struct _lsmSystem {
-    uint32_t magic;
-    char *id;
-    char *name;
-    uint32_t status;
+    uint32_t magic;             /**< Used for verification */
+    char *id;                   /**< Id */
+    char *name;                 /**< Name */
+    uint32_t status;            /**< Enumerated status value */
 };
 
 #define LSM_CONNECT_MAGIC       0xAA7A000A
@@ -202,7 +207,7 @@ struct LSM_DLL_LOCAL _lsmPlugin {
     lsmError    *error;                 /**< Error information */
     lsmPluginRegister   reg;            /**< Plug-in registration */
     lsmPluginUnregister unreg;          /**< Plug-in unregistration */
-    struct lsmMgmtOps    *mgmtOps;      /**< Callback for management ops */
+    struct lsmMgmtOpsV1    *mgmtOps;      /**< Callback for management ops */
     struct lsmSanOpsV1    *sanOps;        /**< Callbacks for SAN ops */
     struct lsmNasOpsV1    *nasOps;        /**< Callbacks for NAS ops */
     struct lsmFsOpsV1     *fsOps;         /**< Callbacks for fs ops */
@@ -277,13 +282,13 @@ struct LSM_DLL_LOCAL _lsmSs {
  * Returns a pointer to a newly created connection structure.
  * @return NULL on memory exhaustion, else new connection.
  */
-LSM_DLL_LOCAL lsmConnectPtr getConnection();
+LSM_DLL_LOCAL lsmConnect *getConnection();
 
 /**
  * De-allocates the connection.
  * @param c     Connection to free.
  */
-LSM_DLL_LOCAL void freeConnection(lsmConnectPtr c);
+LSM_DLL_LOCAL void freeConnection(lsmConnect *c);
 
 /**
  * Loads the requester driver specified in the uri.
@@ -295,11 +300,11 @@ LSM_DLL_LOCAL void freeConnection(lsmConnectPtr c);
  * @param flags         Reserved flag for future use
  * @return LSM_ERR_OK on success, else error code.
  */
-LSM_DLL_LOCAL int loadDriver(lsmConnectPtr c, xmlURIPtr uri,
+LSM_DLL_LOCAL int loadDriver(lsmConnect *c, xmlURIPtr uri,
                                 const char *password, uint32_t timeout,
                                 lsmErrorPtr *e, lsmFlag_t flags);
 
-LSM_DLL_LOCAL char* capabilityString(lsmStorageCapabilitiesPtr c);
+LSM_DLL_LOCAL char* capabilityString(lsmStorageCapabilities *c);
 
 #ifdef  __cplusplus
 }

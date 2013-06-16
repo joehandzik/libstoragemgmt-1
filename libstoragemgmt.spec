@@ -1,5 +1,5 @@
 Name:           libstoragemgmt
-Version:        0.0.12
+Version:        0.0.20
 Release:        1%{?dist}
 Summary:        Storage array management library
 Group:          System Environment/Libraries
@@ -8,8 +8,8 @@ URL:            http://sourceforge.net/projects/libstoragemgmt/
 Source0:        http://sourceforge.net/projects/libstoragemgmt/files/Alpha/libstoragemgmt-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires:  yajl-devel libxml2-devel pywbem check-devel m2crypto glib2-devel
-Requires:       pywbem m2crypto
+BuildRequires:  yajl-devel libxml2-devel pywbem check-devel m2crypto glib2-devel python-paramiko
+Requires:       pywbem m2crypto %{name}-python python-paramiko
 
 %if 0%{?fedora}
 BuildRequires:  systemd-units
@@ -35,14 +35,31 @@ Requires:       %{name}%{?_isa} = %{version}-%{release}
 The %{name}-devel package contains libraries and header files for
 developing applications that use %{name}.
 
+%package        python
+Summary:        Python client libraries and plug-in support for %{name}
+Group:          System Environment/Libraries
+Requires:       %{name} = %{version}-%{release}
+BuildArch:      noarch
+
+%description	python
+The %{name}-python package contains python client libraries as
+well as python framework support and open source plug-ins written in python.
 
 %prep
 %setup -q
 
 %build
-%configure --disable-static
-make %{?_smp_mflags}
+#The version.py gets created so set the .py to match .py.in times
+UpdateTimestamps(){
+	touch -r lsm/lsm/version.py.in lsm/lsm/version.py
+}
 
+#Tell the install program to preserve file date/timestamps
+%configure --disable-static INSTALL_DATA="\${INSTALL} -p"
+
+UpdateTimestamps
+
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
@@ -117,9 +134,6 @@ fi
 %{_libdir}/*.so.*
 %{_bindir}/*
 
-#Python library files
-%{python_sitelib}/*
-
 %if 0%{?fedora}
 %{_unitdir}/*
 %endif
@@ -139,8 +153,78 @@ fi
 %{_libdir}/*.so
 %{_libdir}/pkgconfig/libstoragemgmt.pc
 
+%files python
+%defattr(-,root,root,-)
+#Python library files
+%{python_sitelib}/*
+
 %changelog
-* Fri Sep 07 2012 Tony Asleson (Red Hat) <tasleson@redhat.com>
+* Fri May 24 2013 Tony Asleson <tasleson@redhat.com> 0.0.20-1
+- Python library files now in separate rpm
+- Additional debug for plug-ins when exceptions occur
+- iSCSI CHAP support modified to handle both inbound and outbound authentication
+- VOLUME_THIN Added as new capability flag
+- IBM V7000 storage array support
+- NFS export support for targetd
+- EXPORT_CUSTOM_PATH added capability flag
+
+* Sat Apr 20 2013 Tony Asleson <tasleson@redhat.com> 0.0.19-1
+- Improved E-Series array support
+- Ontap plug-in: improve performance with many Volumes
+- lsmcli: Number of corrections on handling unit specifiers
+- lsmcli: Correct stack track when stdout is written to while closed
+- Fix build to work with automake >= 1.12
+
+* Thu Mar 7 2013 Tony Asleson <tasleson@redhat.com> 0.0.18-1
+- lsmd: Re-written in C
+- Simplify fs_delete
+- Corrections for C client against Python plugin
+- Testing: Run cross language unit test too
+- Initial FS support for targetd plugin
+- Fix multi-arch python issues which prevent py and compiled py files
+  from being identical on different arches
+
+* Thu Jan 31 2013 Tony Asleson <tasleson@redhat.com> 0.0.17-1
+- Inconsistency corrections between C and Python API
+- Source code documentation updates
+- NexentaStor plug-in has been added
+
+* Wed Jan 2 2013 Tony Asleson <tasleson@redhat.com> 0.0.16-1
+- lsmcli: Add confirmation prompt for data loss operations
+- lsmcli: Display enumerated values as text
+- lsmcli: Exit with 7 for --job-status when not complete
+- Fixed URI example to reference an existing plug-in
+- lsmcli: Retrieve plug-in desc. and version (lsmcli --plugin-info)
+- simc: Implement CHAP auth function (no-op)
+- lsmcli: Change check for determining if lsmd is running
+- Disable mirroring for SMI-S as it needs some re-work
+
+* Mon Nov 19 2012 Tony Asleson <tasleson@redhat.com> 0.0.15-1
+- Pool parameter is optional when replicating a volume
+- Code improvements(Memory leak fix, lsmcli checks if lsmd is running)
+- Source code documentation updates
+- Ability to override simulator data storage location
+- make check target added to run unit tests
+
+* Fri Oct 19 2012 Tony Asleson <tasleson@redhat.com> 0.0.14-1
+- test/cmdline.py added to automatically test what an array supports
+- Bug fixes (local plug-in execution, smi-s delete clone, code warnings)
+- targetd: (uri syntax consistency change, initialization code change)
+- Pool id added to volume information
+- lsmcli: Added --replicate-volume-range-block-size <system id> to retrieve
+  replicated block size
+
+* Fri Sep 28 2012 Tony Asleson (Red Hat) <tasleson@redhat.com> 0.0.13-1
+- targetD Feature adds/fixes for initiators, init_granted_to_volume,
+  volumes_accessible_by_init, initiator_grant, initiator_revoke
+- SMI-S added compatibility with CIM_StorageConfigurationService
+- SMI-S bug fixes/changes to support XIV arrays (Basic functionality verified)
+- SMI-S Proxy layer added to allow different internal implementations of smi-s
+  client
+- Added missing version information for C plug-in API
+- lsmcli URI can be stored in file .lsmcli in users home directory
+
+* Fri Sep 07 2012 Tony Asleson (Red Hat) <tasleson@redhat.com> 0.0.12-1
 - SMI-S plug-in enhancements (Detach before delete, bug fixes for eSeries)
 - Added version specifier for non-opaque structs in plug-in callback interface
 - Documentation updates (doxygen, man pages)
