@@ -161,7 +161,6 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
-U = @U@
 VERSION = @VERSION@
 YAJL_LIBS = @YAJL_LIBS@
 abs_builddir = @abs_builddir@

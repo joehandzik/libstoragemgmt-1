@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Red Hat, Inc.
+ * Copyright (C) 2011-2013 Red Hat, Inc.
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -36,7 +36,7 @@ void debug_plugin(void)
 
 int main(int argc, char *argv[])
 {
-    lsmConnectPtr c = NULL;
+    lsmConnect *c = NULL;
     lsmErrorPtr e = NULL;
 
     LSM::Arguments a;

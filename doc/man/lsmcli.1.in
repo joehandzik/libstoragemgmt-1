@@ -1,4 +1,4 @@
-.TH LSMCLI "1" "September 2012" "lsmcli @VERSION@" "libStorageMgmt"
+.TH LSMCLI "1" "May 2013" "lsmcli @VERSION@" "libStorageMgmt"
 .SH NAME
 lsmcli \- LibStorageMgmt command line interface
 .SH SYNOPSIS
@@ -29,6 +29,12 @@ print sizes in human readable format
 \fB\-t\fR SEP, \fB\-\-terse\fR=\fISEP\fR
 print output in terse form with "SEP" as a record
 separator
+.TP
+\fB\-e\fR, \fB\-\-enum\fR
+display enumerated types as numbers instead of text
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+bypass confirmation prompt for data loss operations
 .TP
 \fB\-w\fR WAIT, \fB\-\-wait\fR=\fIWAIT\fR
 command timeout value in ms (default = 30s)
@@ -64,6 +70,9 @@ Note: SNAPSHOTS listing requires: \fB\-\-fs\fR <fs id>
 \fB\-\-capabilities=\fR<system id>
 Retrieves array capabilities
 .TP
+\fB\-\-plugin\-info\fR
+Retrieves plugin description and version
+.TP
 \fB\-\-delete\-fs=\fR<fs id>
 Delete a filesystem
 .TP
@@ -85,7 +94,7 @@ Removes an initiator from an access group, requires:
 \fB\-\-create\-volume=\fR<volume name>
 Creates a volume (logical unit) requires:
 .br
-\fB\-\-size\fR <volume size> (Can use M, G, T)
+\fB\-\-size\fR <volume size>
 .br
 \fB\-\-pool\fR <pool id>
 .br
@@ -94,7 +103,7 @@ Creates a volume (logical unit) requires:
 \fB\-\-create\-fs=\fR<fs name>
 Creates a file system requires:
 .br
-\fB\-\-size\fR <fs size> (Can use M, G, T)
+\fB\-\-size\fR <fs size>
 .br
 \fB\-\-pool\fR <pool id>
 .TP
@@ -166,11 +175,17 @@ Deletes a snapshot requires \fB\-\-fs\fR
 \fB\-r\fR <volume id>, \fB\-\-replicate\-volume=\fR<volume id>
 replicates a volume, requires:
 .br
-\fB\-\-type\fR [SNAPSHOT|CLONE|COPY|MIRROR]
-.br
-\fB\-\-pool\fR <pool id>
+\fB\-\-type\fR [SNAPSHOT|CLONE|COPY|MIRROR_ASYNC|MIRROR_SYNC]
 .br
 \fB\-\-name\fR <human name>
+.br
+Optional:
+.br
+\fB\-\-pool\fR <pool id> (Plugin choice if absent)
+.br
+.TP
+\fB\-\-replicate\-volume\-range\-block\-size=\fR<system id>
+size of each replicated block in bytes
 .TP
 \fB\-\-replicate\-volume\-range=\fR<volume id>
 Replicates a portion of a volume, requires:
@@ -186,12 +201,17 @@ Replicates a portion of a volume, requires:
 \fB\-\-count\fR <number of blocks to replicate>
 .TP
 \fB\-\-iscsi\-chap=\fR<initiator id>
-configures ISCSI inbound CHAP authentication
-requires:
+configures ISCSI inbound/outbound CHAP authentication
 .br
-\fB\-\-username\fR <chap user name>
+Optional:
 .br
-\fB\-\-password\fR <chap password>
+\fB\-\-in\-user\fR <inbound CHAP user name>
+.br
+\fB\-\-in\-password\fR <inbound CHAP password>
+.br
+\fB\-\-out\-user\fR <outbound CHAP user name>
+.br
+\fB\-\-out\-password\fR <inbound CHAP user password
 .TP
 \fB\-\-access\-grant=\fR<initiator id>
 Grants access to an initiator to a volume
@@ -240,11 +260,9 @@ Removes a nfs export
 \fB\-\-nfs\-export\-fs=\fR<file system id>
 creates a nfs export
 .br
-Required:
-.br
-\fB\-\-exportpath\fR e.g. /foo/bar
-.br
 Optional:
+.br
+\fB\-\-exportpath\fR e.g. /foo/bar.
 .br
 Note: root, ro, rw are to be repeated for each host
 .br
@@ -282,7 +300,7 @@ Removes dependencies
 .SH COMMAND OPTIONS
 .TP
 \fB\-\-size\fR=\fIsize\fR
-size (Can use M, G, T postfix)
+size (Can use B, K, M, G, T, P postfix, IEC sizing) No postfix indicates bytes
 .TP
 \fB\-\-pool\fR=\fIpool\fR id
 pool ID
@@ -359,12 +377,27 @@ destination block address to replicate
 \fB\-\-count=\fR<block count>
 number of blocks to replicate
 .TP
-\fB\-\-username=\fR<username>
-CHAP user name
+\fB\-\-in\-user=\fR<username>
+CHAP inbound user name
 .TP
-\fB\-\-password=\fR<password>
-CHAP password
+\fB\-\-in\-password=\fR<password>
+CHAP inbound password
+.TP
+\fB\-\-out\-user=\fR<out_user>
+CHAP outbound user name
+.TP
+\fB\-\-out\-password=\fR<out_password>
+CHAP outbound password
 .PP
+.SH FILES
+.TP
+~/.lsmcli
+lsmcli configuration file, containing name-value pairs separated
+by '='. The only currently supported configuration option is 'uri',
+such as 'uri=ontap://user@filer.example.com'.
+
+Configuration options in .lsmcli are only used if not overridden by
+command-line option or environment variable.
 .SH BUGS
 Please report bugs to 
 <libstoragemgmt\-devel@lists.sourceforge.net>

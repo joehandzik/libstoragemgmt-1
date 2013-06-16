@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Red Hat, Inc.
+ * Copyright (C) 2011-2013 Red Hat, Inc.
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -203,7 +203,7 @@ void processCommandLine( int argc, char **argv, Arguments &args );
 
 const uint64_t MiB = 1048576;       //2**20
 const uint64_t GiB = 1073741824;    //2**30
-const uint64_t TiB = 1099511627776; //2**40
+const uint64_t TiB = 1099511627776ULL; //2**40
 
 /**
  * Validates and returns the value of size that the user supplied
