@@ -1,9 +1,10 @@
-libstoragemgmt (0.0.20-1) UNRELEASED; urgency=low
+libstoragemgmt (0.0.20-1) unstable; urgency=low
 
   * [3aa8f15] Add dependency on python-m2crypto module
   * [d19de01] Imported Upstream version 0.0.20
+  * upload to unstable
 
- -- Ritesh Raj Sarraf <rsarraf@netapp.com>  Sun, 16 Jun 2013 14:25:19 +0530
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Wed, 26 Jun 2013 02:09:50 +0530
 
 libstoragemgmt (0.0.12-1) experimental; urgency=low
 
