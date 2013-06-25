@@ -1,0 +1,34 @@
+diff -Naru ./test/Makefile.am /var/tmp/libstoragemgmt/test/Makefile.am
+--- ./test/Makefile.am	2013-06-26 01:22:44.235666918 +0530
++++ /var/tmp/libstoragemgmt/test/Makefile.am	2013-06-21 13:10:42.316827917 +0530
+@@ -6,5 +6,5 @@
+ 
+ check_PROGRAMS = tester
+ tester_CFLAGS = $(LIBCHECK_CFLAGS)
+-tester_LDADD = ../src/libstoragemgmt.la $(LIBCHECK_LIBS)
++tester_LDADD = ../src/libstoragemgmt.la $(LIBCHECK_LIBS) -lpthread
+ tester_SOURCES = tester.c
+diff -Naru ./test/Makefile.in /var/tmp/libstoragemgmt/test/Makefile.in
+--- ./test/Makefile.in	2013-06-26 01:22:44.235666918 +0530
++++ /var/tmp/libstoragemgmt/test/Makefile.in	2013-06-21 13:10:42.316827917 +0530
+@@ -235,7 +235,7 @@
+ EXTRA_DIST = cmdtest.py runtests.sh
+ TESTS = runtests.sh
+ tester_CFLAGS = $(LIBCHECK_CFLAGS)
+-tester_LDADD = ../src/libstoragemgmt.la $(LIBCHECK_LIBS)
++tester_LDADD = ../src/libstoragemgmt.la $(LIBCHECK_LIBS) -lpthread
+ tester_SOURCES = tester.c
+ all: all-am
+ 
+diff -Naru ./test/runtests.sh /var/tmp/libstoragemgmt/test/runtests.sh
+--- ./test/runtests.sh	2013-06-26 01:22:44.235666918 +0530
++++ /var/tmp/libstoragemgmt/test/runtests.sh	2013-06-21 13:10:42.316827917 +0530
+@@ -78,7 +78,7 @@
+ good "mkdir -p $plugins"
+ 
+ #Copy plugins to one directory.
+-good "find $rootdir \( ! -regex '.*/\..*' \) -type f -name \*_lsmplugin -exec cp {} $plugins \;"
++good "find $rootdir/ \( ! -regex '.*/\..*' \) -type f -name \*_lsmplugin -exec cp {} $plugins \;"
+ 
+ #Export needed vars
+ export PYTHONPATH=$rootdir/lsm
