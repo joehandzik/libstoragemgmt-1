@@ -1,3 +1,4 @@
+Patch to fix build failure in tests/ Generated from upstrema git repo
 diff -Naru ./test/Makefile.am /var/tmp/libstoragemgmt/test/Makefile.am
 --- ./test/Makefile.am	2013-06-26 01:22:44.235666918 +0530
 +++ /var/tmp/libstoragemgmt/test/Makefile.am	2013-06-21 13:10:42.316827917 +0530
