@@ -19,7 +19,7 @@ Description: library for storage array management - cli tools
  This package contains the cli tools
 
 Package: libstoragemgmtd
-Architecture: any
+Architecture: linux-any
 Depends: libstoragemgmt0 (= ${binary:Version}), ${misc:Depends}, python-libstoragemgmt, ${python:Depends}, python-pywbem, ${shlibs:Depends}
 Description: library for storage array management - daemon
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
