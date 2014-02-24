@@ -1,3 +1,11 @@
+libstoragemgmt (0.0.20-2) unstable; urgency=medium
+
+  * [6edc8d9] Restrict build to Linux platforms only
+  * [08002c6] Disable tests until the next release
+  * [24989c9] Fix build warning for format error
+
+ -- Ritesh Raj Sarraf <rsarraf@netapp.com>  Mon, 24 Feb 2014 23:01:41 +0530
+
 libstoragemgmt (0.0.20-1) unstable; urgency=low
 
   * [3aa8f15] Add dependency on python-m2crypto module
