@@ -1,3 +1,33 @@
+rrs@zan:/var/tmp$ gcc -Wall -o test test.c 
+test.c: In function ‘main’:
+test.c:8:2: warning: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘char *’ [-Wformat=]
+  printf(format, "ID", "Name", "Type");
+  ^
+
+rrs@zan:/var/tmp$ gcc -Wall -Werror=format -o test test.c 
+test.c: In function ‘main’:
+test.c:8:2: error: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘char *’ [-Werror=format=]
+  printf(format, "ID", "Name", "Type");
+  ^
+cc1: some warnings being treated as errors
+
+rrs@zan:/var/tmp$ cat test.c 
+#include <stdio.h>
+
+int main()
+{
+        const char format[] = "%-40s%-16s%-5d\n";
+        const char new_format[] = "%-40s%-16s%-5s\n";
+
+        printf(format, "ID", "Name", "Type");
+        printf(new_format, "ID", "Name", "Type");
+        return 0;
+}
+
+rrs@zan:/var/tmp$ ./test 
+ID                                      Name            4195892
+ID                                      Name            Type 
+
 Index: libstoragemgmt/tools/lsmcli/lsmcli_func.cpp
 ===================================================================
 --- libstoragemgmt.orig/tools/lsmcli/lsmcli_func.cpp	2014-02-24 22:26:47.408088587 +0530
