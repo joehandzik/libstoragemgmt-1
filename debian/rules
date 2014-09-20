@@ -9,9 +9,9 @@ DPKG_EXPORT_BUILDFLAGS = 1
 include /usr/share/dpkg/buildflags.mk
 
 %:
-	dh $@ --with python2
+	dh $@ --with python2,autoreconf
 
 override_dh_auto_configure:
-	autoreconf -i
+	autoreconf -i -f
 	./configure --prefix=/usr --disable-build-c-unit
 
