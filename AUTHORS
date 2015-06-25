@@ -10,6 +10,8 @@ The primary maintainer(s) and people with commit access rights:
    Tony Asleson         <tasleson@redhat.com>
    Andy Grover          <agrover@redhat.com>
    Eduardo Lima         <eblima@br.ibm.com>
+   Gris Ge              <fge@redhat.com>
+   Ma Shimiao           <mashimiao.fnst@cn.fujitsu.com>
 
 Patches have also been contributed by:
 
@@ -21,6 +23,9 @@ Patches have also been contributed by:
    Andy Grover              <agrover@redhat.com>
    Anatoly Legkodymov       <legko777@fastmail.fm>
    Deepak C Shetty          <deepakcs@linux.vnet.ibm.com>
+   Gris Ge                  <fge@redhat.com>
+   Ma Shimiao               <mashimiao.fnst@cn.fujitsu.com>
+   Ewan Milne               <emilne@redhat.com>
 
 
 [....send patches to get your name here....]

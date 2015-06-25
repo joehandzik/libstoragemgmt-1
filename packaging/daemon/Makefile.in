@@ -34,6 +34,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@HAVE_SYSTEMD_TRUE@@WITH_REST_API_TRUE@am__append_1 = libstoragemgmt-rest.service
 subdir = packaging/daemon
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -113,14 +114,19 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+JSON_CFLAGS = @JSON_CFLAGS@
+JSON_LIBS = @JSON_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBCHECK_CFLAGS = @LIBCHECK_CFLAGS@
 LIBCHECK_LIBS = @LIBCHECK_LIBS@
 LIBGLIB_CFLAGS = @LIBGLIB_CFLAGS@
 LIBGLIB_LIBS = @LIBGLIB_LIBS@
+LIBMICROHTTPD_CFLAGS = @LIBMICROHTTPD_CFLAGS@
+LIBMICROHTTPD_LIBS = @LIBMICROHTTPD_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSM_LIBTOOL_VERSION = @LIBSM_LIBTOOL_VERSION@
 LIBSM_MAJOR_VERSION = @LIBSM_MAJOR_VERSION@
 LIBSM_MICRO_VERSION = @LIBSM_MICRO_VERSION@
 LIBSM_MINOR_VERSION = @LIBSM_MINOR_VERSION@
@@ -149,6 +155,7 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PYTHON = @PYTHON@
 PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
@@ -159,6 +166,7 @@ RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VERSION = @VERSION@
 YAJL_LIBS = @YAJL_LIBS@
@@ -220,8 +228,10 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-@HAVE_SYSTEMD_TRUE@systemdsystemunit_DATA = libstoragemgmt.service
-EXTRA_DIST = libstoragemgmt.service lsm-tmpfiles.conf libstoragemgmtd
+@HAVE_SYSTEMD_TRUE@systemdsystemunit_DATA = libstoragemgmt.service \
+@HAVE_SYSTEMD_TRUE@	$(am__append_1)
+EXTRA_DIST = libstoragemgmt.service lsm-tmpfiles.conf libstoragemgmtd \
+	libstoragemgmt-rest.service
 all: all-am
 
 .SUFFIXES:

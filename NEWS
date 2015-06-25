@@ -1,5 +1,114 @@
 News for libStorageMgmt
 
+1.1.1: Dec 4 2014
+    - Library adds:
+
+      API Constants for new pool element types and plugin changes to support it
+      * C constants:
+         LSM_POOL_ELEMENT_TYPE_VOLUME_FULL, LSM_POOL_ELEMENT_TYPE_VOLUME_THIN
+      * Py constants:
+         Pool.ELEMENT_TYPE_VOLUME_FULL, Poll.ELEMENT_TYPE_THIN
+
+      lsmcli:
+      * lt - Alias for 'list --type target_ports'
+      * Removed --init for volume-mask, it was broken for targetd (the only
+        user) and instead of fixing we are going to improve targetd to support
+        access groups in the next release
+
+    - Numerous code improvements, including a big SMI-S plugin refactor,
+      source code documentation corrections
+
+    - Bug fix: Use correct default values for anonymous uid/gid in lsmcli
+    - Bug fix: simc simulator not working for allowable NULL parameters for:
+      *  fs_child_dependency
+      *  fs_child_dependency_rm
+      *  fs_snapshot_restore
+    - Bug fix: lsm_restd memory leak corrections
+    - Bug fix: NetApp plugin, correctly set export path when caller specifies
+      default in API
+    - Bug fix: Add file locking to sim plugin to prevent concurrent modification
+    - Bug fix: Consistently report common error conditions for NO_STATE_CHANGE,
+      EXISTS_INITIATOR for all plugins
+    - Bug fix: Number of bugs addressed in SMI-S plugin including:
+      * EMC: Correct error path when replicating a volume with a duplicate
+        volume name
+      * HDS: Correctly create thinly provisioned volume on thinly provisioned
+        pool
+
+1.0.0: Sep 7 2014
+    - Release version 1
+    - Numerous constants re-naming & removing
+    - Removed the pool create/delete until things work better,
+      esp. WRT SMI-S
+    - Added checks for initiator ID verification
+    - Added checks for vpd 0x83 verification
+    - Simplified error logging (removed domain & level)
+    - Re-named functions for online,offline -> enable,disable
+    - Always use objects instead of object ID in function
+      params
+    - Removed individual files from fs snapshot creation
+    - Add unsupported actions for pools
+    - lsm_capability_set_n uses a -1 to terminate list
+    - Volume status removed, replaced with admin state
+    - Removed ibmiv7k plugin
+    - Explicitly specify python2
+    - Error path consistency changes (same error for same condition
+      across plug-ins)
+    - Numerous bug fixes
+
+0.1.0: Jul 3 2014
+    - Release candidate for a 1.0.0 release
+    - Optional data removed
+    - Initiator only functions removed
+    - Pool create from from volumes removed
+    - Code directory structure updated
+    - Target port listing added
+
+0.0.24: Jan 30 2014
+    - Command line interface (CLI) re-factored and improved to be easier to use
+      and more consistent, man pages have been updated
+    - Command line output now has '-s, --script' for an additional way to output
+      information for consumption in scripts
+    - Command line option '-o' for retrieving optional/extended data for disks &
+      pools
+    - Pool creation/deleting in CLI & python API
+    - Numerous small bug fixes
+    - C API, added ability to list disks, list plugins and retrieve optional
+      data for disks
+    - SSL for SMI-S is more stringent on certificate checking for newer
+      distributions, new URI option "no_ssl_verify=yes" to disable
+
+0.0.23: Nov 27 2013
+    - Addition of listing disks implemented for SMI-S and Ontap plugins
+      (new, not in C library yet)
+    - Add the ability to list currently installed and usable plug-ins
+    - Verify return types are correct in python client calls
+    - Added the ability to retrieve optional data (new, not in C library yet)
+    - Visibility reductions for python code (somethings were public when should be
+      private
+    - Add calls to create/delete pools (new, not in C library yet)
+    - Add missing initiator type for SAS
+    - Improved vpd83 retrieval for SMI-S
+    - Performance improvements for SMI-S plug-in
+    - Numerous small bug fixes
+    - Nstor plugin, additional testing and bug fixes
+    - lsmd, added call to setgroups and enable full relo and PIE (ASLR) for
+      security improvements
+    - simulator state is now versioned
+    - SCSI Unit Attention uevent handling
+
+0.0.22: Aug 12 2013
+    - Numerous code improvments/fixes
+    - BZ 968384
+    - BZ 990577
+
+0.0.21: Jul 16 2013
+    - IEC binary size handling
+    - Functionality improvements for IBM V7K array
+    - Workaround for python bug on F19
+    - Bugfix (BZ 968384)
+    - Package plug-ins as separately in rpm packages
+
 0.0.20: May 24 2013
     - Python library files now in separate rpm
     - Additional debug for plug-ins when exceptions occur

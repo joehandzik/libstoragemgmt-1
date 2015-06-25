@@ -38,10 +38,9 @@ host_triplet = @host@
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(srcdir)/libstoragemgmt.pc.in \
-	$(srcdir)/libstoragemgmt.spec.in $(top_srcdir)/configure \
-	$(top_srcdir)/lsm/lsm/version.py.in AUTHORS COPYING.LIB \
-	ChangeLog INSTALL NEWS build-aux/compile \
+	$(srcdir)/libstoragemgmt.pc.in $(top_srcdir)/configure \
+	$(top_srcdir)/python_binding/lsm/version.py.in AUTHORS \
+	COPYING.LIB ChangeLog INSTALL NEWS build-aux/compile \
 	build-aux/config.guess build-aux/config.sub build-aux/depcomp \
 	build-aux/install-sh build-aux/ltmain.sh build-aux/missing \
 	build-aux/py-compile
@@ -56,8 +55,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = config.h
-CONFIG_CLEAN_FILES = libstoragemgmt.pc libstoragemgmt.spec \
-	lsm/lsm/version.py
+CONFIG_CLEAN_FILES = libstoragemgmt.pc python_binding/lsm/version.py
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_GEN = $(am__v_GEN_$(V))
 am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
@@ -104,7 +102,8 @@ AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
 	distdir dist dist-all distcheck
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = src plugin doc include tools lsm packaging test
+DIST_SUBDIRS = c_binding python_binding plugin doc tools daemon \
+	packaging test
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -175,14 +174,19 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+JSON_CFLAGS = @JSON_CFLAGS@
+JSON_LIBS = @JSON_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBCHECK_CFLAGS = @LIBCHECK_CFLAGS@
 LIBCHECK_LIBS = @LIBCHECK_LIBS@
 LIBGLIB_CFLAGS = @LIBGLIB_CFLAGS@
 LIBGLIB_LIBS = @LIBGLIB_LIBS@
+LIBMICROHTTPD_CFLAGS = @LIBMICROHTTPD_CFLAGS@
+LIBMICROHTTPD_LIBS = @LIBMICROHTTPD_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSM_LIBTOOL_VERSION = @LIBSM_LIBTOOL_VERSION@
 LIBSM_MAJOR_VERSION = @LIBSM_MAJOR_VERSION@
 LIBSM_MICRO_VERSION = @LIBSM_MICRO_VERSION@
 LIBSM_MINOR_VERSION = @LIBSM_MINOR_VERSION@
@@ -211,6 +215,7 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PYTHON = @PYTHON@
 PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
@@ -221,6 +226,7 @@ RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VERSION = @VERSION@
 YAJL_LIBS = @YAJL_LIBS@
@@ -284,12 +290,12 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I m4
 DISTCHECK_CONFIGURE_FLAGS = --with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir)
-SUBDIRS = src plugin doc include tools lsm packaging $(am__append_1)
+SUBDIRS = c_binding python_binding plugin doc tools daemon packaging \
+	$(am__append_1)
 EXTRA_DIST = \
 	libstoragemgmt.pc.in \
 	libstoragemgmt.pc \
-	libstoragemgmt.spec.in \
-	libstoragemgmt.spec
+	autogen.sh
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libstoragemgmt.pc
@@ -351,9 +357,7 @@ distclean-hdr:
 	-rm -f config.h stamp-h1
 libstoragemgmt.pc: $(top_builddir)/config.status $(srcdir)/libstoragemgmt.pc.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
-libstoragemgmt.spec: $(top_builddir)/config.status $(srcdir)/libstoragemgmt.spec.in
-	cd $(top_builddir) && $(SHELL) ./config.status $@
-lsm/lsm/version.py: $(top_builddir)/config.status $(top_srcdir)/lsm/lsm/version.py.in
+python_binding/lsm/version.py: $(top_builddir)/config.status $(top_srcdir)/python_binding/lsm/version.py.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 
 mostlyclean-libtool:
