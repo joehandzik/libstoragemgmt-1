@@ -50,8 +50,7 @@ CONFIG_CLEAN_VPATH_FILES =
 am_tester_OBJECTS = tester-tester.$(OBJEXT)
 tester_OBJECTS = $(am_tester_OBJECTS)
 am__DEPENDENCIES_1 =
-tester_DEPENDENCIES = ../c_binding/libstoragemgmt.la \
-	$(am__DEPENDENCIES_1)
+tester_DEPENDENCIES = ../src/libstoragemgmt.la $(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_$(V))
 am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
 am__v_lt_0 = --silent
@@ -125,19 +124,14 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-JSON_CFLAGS = @JSON_CFLAGS@
-JSON_LIBS = @JSON_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBCHECK_CFLAGS = @LIBCHECK_CFLAGS@
 LIBCHECK_LIBS = @LIBCHECK_LIBS@
 LIBGLIB_CFLAGS = @LIBGLIB_CFLAGS@
 LIBGLIB_LIBS = @LIBGLIB_LIBS@
-LIBMICROHTTPD_CFLAGS = @LIBMICROHTTPD_CFLAGS@
-LIBMICROHTTPD_LIBS = @LIBMICROHTTPD_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSM_LIBTOOL_VERSION = @LIBSM_LIBTOOL_VERSION@
 LIBSM_MAJOR_VERSION = @LIBSM_MAJOR_VERSION@
 LIBSM_MICRO_VERSION = @LIBSM_MICRO_VERSION@
 LIBSM_MINOR_VERSION = @LIBSM_MINOR_VERSION@
@@ -166,7 +160,6 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PYTHON = @PYTHON@
 PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
@@ -177,7 +170,6 @@ RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
-SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VERSION = @VERSION@
 YAJL_LIBS = @YAJL_LIBS@
@@ -239,15 +231,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AM_CPPFLAGS = \
-	-I$(top_srcdir)/c_binding/include \
-	-I@srcdir@/c_binding/include \
-	$(LIBXML_CFLAGS)
-
-EXTRA_DIST = cmdtest.py runtests.sh plugin_test.py
+INCLUDES = -I$(top_srcdir)/include -I@srcdir@/include
+EXTRA_DIST = cmdtest.py runtests.sh
 TESTS = runtests.sh
 tester_CFLAGS = $(LIBCHECK_CFLAGS)
-tester_LDADD = ../c_binding/libstoragemgmt.la $(LIBCHECK_LIBS)
+tester_LDADD = ../src/libstoragemgmt.la $(LIBCHECK_LIBS)
 tester_SOURCES = tester.c
 all: all-am
 
@@ -305,27 +293,24 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tester-tester.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ $<
+@am__fastdepCC_FALSE@	$(COMPILE) -c $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@

@@ -1,618 +1,396 @@
-.TH LSMCLI "1" "September 2014" "lsmcli @VERSION@" "libStorageMgmt"
+.TH LSMCLI "1" "May 2013" "lsmcli @VERSION@" "libStorageMgmt"
 .SH NAME
-lsmcli - libStorageMgmt command line interface
-
+lsmcli \- LibStorageMgmt command line interface
 .SH SYNOPSIS
-.B lsmcli \fIcommand\fR [\fIGLOBAL OPTIONS\fR]...[\fICOMMAND OPTIONS\fR]...
-
+.B lsmcli
+[\fIoptions\fR]... [\fIcommand\fR]... [\fIcommand options\fR]...
 .SH DESCRIPTION
 lsmcli is the command line tool for the libStorageMgmt library.  This tool
 allows users to do one off storage related management operations or to script
 management of their storage.
+.SH "OPTIONS (global)"
+.TP
+\fB\-\-version\fR
+show program's version number and exit
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+show this help message and exit
+.TP
+\fB\-u\fR URI, \fB\-\-uri\fR=\fIURI\fR
+uniform resource identifier (env LSMCLI_URI)
+.TP
+\fB\-P\fR, \fB\-\-prompt\fR
+prompt for password (env LSMCLI_PASSWORD)
+.TP
+\fB\-H\fR, \fB\-\-human\fR
+print sizes in human readable format
+(e.g., MiB, GiB, TiB)
+.TP
+\fB\-t\fR SEP, \fB\-\-terse\fR=\fISEP\fR
+print output in terse form with "SEP" as a record
+separator
+.TP
+\fB\-e\fR, \fB\-\-enum\fR
+display enumerated types as numbers instead of text
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+bypass confirmation prompt for data loss operations
+.TP
+\fB\-w\fR WAIT, \fB\-\-wait\fR=\fIWAIT\fR
+command timeout value in ms (default = 30s)
+.TP
+\fB\-\-header\fR
+include the header with terse
+.TP
+\fB\-b\fR
+run the command asynchronously instead of waiting for
+completion.  lsmcli command will exit with exit code(7) and job id will be 
+written to stdout when a command is still executing on the storage array.  
+Use --job-status <job id> to inquire on the progress of the command.
 
-.SH PREREQUISITES
-.TP 8
-* libStorageMgmt daemon.
-The daemon '\fBlsmd\fR' is required by lsmcli.
-.TP 8
-* URI(Uniform Resource Identifier)
-URI is used to identify which plugin to use and how the plugin should
-communicate with the storage array. The valid URI format is:
-.RS 12
-.nf
-\fBplugin://<username>@host:<port>?<query_string_parameters>\fR
-.br
-\fBplugin+ssl://<username>@host:<port>?<query_string_parameters>\fR
-.fi
-.RE 1
-.RS 8
-Examples, please refer to "LibStorageMgmt User Guide" for more details:
-.RE 1
-.RS 12
-* Simulator:
-.RS 4
-\fBsim://\fR
-.br
-\fBsimc://\fR
-.RE 1
-.RS 12
-* NetApp ONTAP:
-.RS 4
-\fBontap://username@host\fR
-.br
-\fBontap+ssl://username@host\fR
-.RE 1
-.RS 12
-* SMI-S supported arrays (eg. EMC CX/VNX, HDS AMS, IBM SVC/DS, LSI
-MegaRAID and others):
-.RS 4
-\fBsmis://username@host:<port>?namespace=<namespace>\fR
-.br
-\fBsmis+ssl://username@host:<port>?namespace=<namespace>\fR
-.RE 1
-.RS 8
-You can pass URI to lsmcli via one of these methods:
-.RS 4
-* Using '\fB-u\fR, \fB--uri\fR' argument.
-.br
-* Using '\fBLSMCLI_URI\fR' environment variable.
-.br
-* Add this line into \fB$HOME/.lsmcli\fR:
-.RS 4
-uri=\fI<URI>\fR
-.RE 1
-.TP 8
-* Password
-For storage array password authentication you can pass it to
-lsmcli via one of the following methods:
-.RS 12
-* '\fB-P\fR, \fB--prompt\fR' argument to prompt for password.
-.br
-* '\fBLSMCLI_PASSWORD\fR' environment variable.
-.RE 1
-.SH "GLOBAL OPTIONS"
-.TP 15
-\fB--version\fR
-Show program's version number and exit
-.TP 15
-\fB-h\fR, \fB--help\fR
-Show this help message and exit. Will show help message of specific command
-if specified.
-.TP 15
-\fB-u\fR \fI<URI>\fR, \fB--uri\fR \fI<URI>\fR
-Uniform Resource Identifier (env LSMCLI_URI)
-.TP 15
-\fB-P\fR, \fB--prompt\fR
-Prompt for password (env LSMCLI_PASSWORD)
-.TP 15
-\fB-H\fR, \fB--human\fR
-Print sizes in human readable format
-(e.g., KiB, MiB, GiB, TiB, PiB, EiB)
-.TP 15
-\fB-t\fR \fI<SEP>\fR, \fB--terse\fR \fI<SEP>\fR
-Print output in terse form with "SEP" as a record separator without header
-unless '--header' defined.
-.TP 15
-\fB--header\fR
-Include the header with terse
-.TP 15
-\fB-e\fR, \fB--enum\fR
-Display enumerated types as numbers instead of text
-.TP 15
-\fB-f\fR, \fB--force\fR
-Bypass confirmation prompt for data loss operations
-.TP 15
-\fB-w\fR \fI<WAIT>\fR, \fB--wait\fR=\fI<WAIT>\fR
-Command timeout value in ms (default = 30s)
-.TP 15
-\fB-b\fR
-Run the command asynchronously instead of waiting for completion. The lsmcli
-command will exit with exit code(7) and job id will be written to STDOUT when
-a command is still executing on the storage array.
-Use 'job-status --id \fI<job id>\fR' to inquire on the progress of the command.
-Some arrays or plugins might not support asynchronous operations, in those
-circumstances, \fb-b\fR will be ineffective.  Command will wait until finished.
-.TP 15
-\fB-s\fR, \fB--script\fR
-Displaying data in script friendly way.
-.br
-Without this option, data is displayed in this manner (default):
-
-    ID     | Name    | Element Type             ...
-    ------------------------------------------  ...
-    aggr0  | aggr0   | FS,SYSTEM_RESERVED,POOL  ...
-    iscsi  | iscsi   | FS,POOL                  ...
-
-
-With this option, data is displayed in this manner.
-
-    -----------------------------------------------
-    ID               | aggr0
-    Name             | aggr0
-    Element Type     | FS,SYSTEM_RESERVED,POOL
-    ...
-    -----------------------------------------------
-    ID               | iscsi
-    Name             | iscsi
-    Element Type     | FS,POOL
-    ...
-
-Please note:
-.br
-To reduce the width of output, NOT all properties will be displayed in default
-column display.
-
+.SH ENVIRONMENT
+.TP
+LSMCLI_URI
+	The URI for the storage array in question.
+.TP
+LSMCLI_PASSWORD
+	The password to use for the array.
+.IP
 .SH COMMANDS
-.SS list
-List information on LSM objects
-.TP 15
-\fB--type\fR \fI<TYPE>\fR
-Required. Valid values are (case insensitive):
+.TP
+\fB\-l\fR <type>, \fB\-\-list=\fR<type>
+.TP 
+List records of type:
+[VOLUMES|INITIATORS|POOLS|FS|SNAPSHOTS|EXPORTS
 .br
-\fBVOLUMES\fR, \fBPOOLS\fR, \fBFS\fR, \fBSNAPSHOTS\fR,
-\fBEXPORTS\fR, \fBNFS_CLIENT_AUTH\fR,
+|NFS_CLIENT_AUTH|ACCESS_GROUPS|SYSTEMS]
+.TP
+Note: SNAPSHOTS listing requires: \fB\-\-fs\fR <fs id>
+.TP
+\fB\-\-capabilities=\fR<system id>
+Retrieves array capabilities
+.TP
+\fB\-\-plugin\-info\fR
+Retrieves plugin description and version
+.TP
+\fB\-\-delete\-fs=\fR<fs id>
+Delete a filesystem
+.TP
+\fB\-\-delete\-access\-group=\fR<group id>
+Deletes an access group
+.TP
+\fB\-\-access\-group\-add=\fR<access group id>
+Adds an initiator to an access group, requires:
 .br
-\fBACCESS_GROUPS\fR, \fBSYSTEMS\fR, \fBDISKS\fR, \fBPLUGINS\fR,
-\fBTARGET_PORTS\fR.
-
-.TP
-\fB--fs\fR \fI<FS_ID>\fR
-Required for \fB--type\fR=\fBSNAPSHOTS\fR. List the snapshots of certain
-filesystem.
-PLUGINS will list all supported plugins of LSM, not only the current one.
-.TP
-\fB--sys\fR \fI<SYS_ID>\fR
-Search resources from system with SYS_ID. Only supported when querying these
-types of resources: \fBVOLUMES\fR, \fBPOOLS\fR, \fBFS\fR,
-\fBSNAPSHOTS\fR, \fBDISKS\fR, \fBACCESS_GROUPS\fR.
-.TP
-\fB--pool\fR \fI<POOL_ID>\fR
-Search resources from pool with POOL_ID. Only supported by these types of
-resources: \fBVOLUMES\fR, \fBPOOLS\fR, \fBFS\fR.
-.TP
-\fB--vol\fR \fI<VOL_ID>\fR
-Search resources from volume with VOL_ID. Only supported by these types of
-resources: \fBVOLUMES\fR, \fBACCESS_GROUPS\fR.
+\fB\-\-id\fR <initiator id
 .br
-To query volume masking status, please use this command:
-   lsmcli list --type ACCESS_GROUPS --vol <VOL_ID>
+\fB\-\-type\fR <initiator type>
 .TP
-\fB--disk\fR \fI<DISK_ID>\fR
-Search resources from disk with DISK_ID. Only supported by these types of
-resources: \fBDISK\fR.
-.TP
-\fB--ag\fR \fI<AG_ID>\fR
-Search resources from access group with AG_ID. Only supported by these types
-of resources: \fBACCESS_GROUPS\fR, \fBVOLUMES\fR.
+\fB\-\-access\-group\-remove=\fR<access group id>
+Removes an initiator from an access group, requires:
 .br
-To query volume masking status, please use this command:
-   lsmcli list --type VOLUMES --ag <AG_ID>
+\fB\-\-id\fR <initiator id>
 .TP
-\fB--fs\fR \fI<FS_ID>\fR
-Search resources from file system with FS_ID. Only supported by these types
-of resources: \fBFS\fR.
-.TP
-\fB--nfs-export\fR \fI<NFS_EXPORT_ID>\fR
-Search resources from NFS export with NFS_EXPORT_ID. Only supported by these
-types of resources: \fBEXPORTS\fR.
-.TP
-\fB--tgt\fR \fI<TGT_ID>\fR
-Search resources from target port with target port ID. Only supported by these
-types of resources: \fBTARGET_PORTS\fR.
-
-.SS job-status
-Retrieve information about a job.  Please see user guide on how to use.
-.TP 15
-\fB--job\fR \fI<JOB_ID>\fR
-
-.SS capabilities
-Retrieves array capabilities.
-.TP 15
-\fB--sys\fR \fI<SYS_ID>\fR
-Required. ID of the system to query for capabilities.
-
-.SS plugin-info
-Retrieves plugin description and version for current URI.
-
-.SS volume-create
-Creates a volume (AKA., logical volume, virtual disk, LUN).
-.TP 15
-\fB--name\fR \fI<NAME>\fR
-Required. Volume name.
-.TP
-\fB--size\fR \fI<SIZE>\fR
-Required. Volume size (See \fBSIZE OPTION\fR for allowed formats).
-.TP
-\fB--pool\fR \fI<POOL_ID>\fR
-Required. ID of pool.
-.TP
-\fB--provisioning\fR \fI<THINP_TYPE>\fR
-Optional. Provisioning type. Valid values are: DEFAULT, THIN, FULL.
-\fBDEFAULT\fR means let plugin choose. \fBTHIN\fR means requiring a Thin
-Provisioning enabled volume. \fBFULL\fR means requiring a fully allocated
-volume.
-
-.SS volume-delete
-.TP 15
-Delete a volume given its ID
-.TP
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to delete.
-
-.SS volume-resize
-.TP 15
-Re-sizes a volume, requires:
-.TP
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to resize.
-.TP
-\fB--size\fR \fI<NEW_SIZE>\fR
-Required. The new size of volume.(See \fBSIZE OPTION\fR for allowed formats).
-Due to boundary alignment concern, array might return a volume with slightly
-bigger size than requested.
-
-.SS volume-replicate
-Creates a new volume and replicates provided volume to it.
-.TP 15
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to replicate.
-.TP
-\fB--name\fR \fI<NAME>\fR
-Required. The name for new volume to hold replicated data.
-.TP
-\fB--rep-type\fR \fI<REPL_TYPE>\fR (see \fBVOLUME REPLICATION TYPES)\fR
-Required. Valid types of replication are:
+\fB\-\-create\-volume=\fR<volume name>
+Creates a volume (logical unit) requires:
 .br
-\fBCLONE\fR, \fBCOPY\fR, \fBMIRROR_ASYNC\fR,
-\fBMIRROR_SYNC\fR.
-.TP
-\fB--pool\fR \fI<POOL_ID>\fR
-Optional. The ID of pool where the new volume should be created from. If not specified,
-plugin or array will choose appropriate pool.
-
-.SS volume-replicate-range
-Replicates a portion of a volume to the same volume or to a different volume.
-.TP 15
-\fB--src-vol\fR \fI<SRC_VOL_ID>\fR
-Required. The ID of replication source volume.
-.TP
-\fB--dst-vol\fR \fI<DST_VOL_ID>\fR
-Required. The ID of replication destination volume.
-.TP
-\fB--rep-type\fR \fI<REPL_TYPE>\fR (see \fBVOLUME REPLICATION TYPES)\fR
-Required. Appropriate types of replication are:
+\fB\-\-size\fR <volume size>
 .br
-\fBCLONE\fR, \fBCOPY\fR.
+\fB\-\-pool\fR <pool id>
+.br
+\fB\-\-provisioning\fR (optional) [DEFAULT|THIN|FULL]
 .TP
-\fB--src-start\fR \fI<SRC_START_BLK>\fR
-Required. Replication source volume start block number. Must in pair with
-\fB--count\fR and \fB--dst-start\fR.
-If you have several non-continuous block ranges, you can define repeatly
-define this arugument, like '\fB--src-start 0 --dst-start 0 --count 1024
---src-start 2048 --dst-start 2048 --count 2048\fR'
+\fB\-\-create\-fs=\fR<fs name>
+Creates a file system requires:
+.br
+\fB\-\-size\fR <fs size>
+.br
+\fB\-\-pool\fR <pool id>
 .TP
-\fB--dst-start\fR \fI<DST_START_BLK>\fR
-Required. Replication destination volume start block number. Must in pair with
-\fB--count\fR and \fB--src-start\fR.
+\fB\-\-create\-ss=\fR<snapshot name>
+Creates a snapshot requires:
+.br
+\fB\-\-file\fR <repeat for each file> (default is all files)
+.br
+\fB\-\-fs\fR <file system id>
 .TP
-\fB--count\fR \fI<BLK_COUNT>\fR
-Required. The count of replicated block startting from \fB--src-start\R block.
-Must in pair with \fB--src-start\fR and \fB--dst-start\fR.
-
-.SS volume-replicate-range-block-size
-Size of each replicated block on a system in bytes.
-.TP 15
-\fB--sys\fR \fI<SYS_ID>\fR
-Required. ID of the system to query for replicated block size.
-
-.SS volume-dependants
-Returns True if volume has a dependant child, like replication.
-.TP 15
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to query dependency.
-
-.SS volume-dependants-rm
-Removes volume dependencies(like replication).
-.TP 15
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to remove dependency.
-
-.SS volume-access-group
-Lists the access group(s) that have access to the provided volume.
-.TP 15
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to query access.
-
-.SS volume-mask
-.TP 15
-Grant access group RW access to certain volume. Like LUN masking
-or NFS export.
+\fB\-\-create\-access\-group=\fR<Access group name>
+Creates an access group, requires:
+.br
+\fB\-\-id\fR <initiator id>
+.br
+\fB\-\-type\fR [WWPN|WWNN|ISCSI|HOSTNAME]
+.br
+\fB\-\-system\fR <system id>
 .TP
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to access.
+\fB\-\-access\-group\-volumes=\fR<access group id>
+Lists the volumes that the access group has been
+granted access to
 .TP
-\fB--ag\fR \fI<AG_ID>\fR
-Required. The ID of access group to grant.
-
-.SS volume-unmask
-.TP 15
-Revoke access group RW access to specified volume.
+\fB\-\-volume\-access\-group=\fR<volume id>
+Lists the access group(s) that have access to volume
 .TP
-\fB--vol\fR \fI<VOL_ID>\fR
-Required. The ID of volume to revoke.
+\fB\-\-volumes\-accessible\-initiator=\fR<initiator id>
+Lists the volumes that are accessible by the initiator
 .TP
-\fB--ag\fR \fI<AG_ID>\fR
-Required. The ID of access group to revoke.
-
-.SS access-group-create
-.TP 15
-Create an access group.
+\fB\-\-initiators\-granted\-volume=\fR<volume id>
+Lists the initiators that have been granted access to
+specified volume
 .TP
-\fB--name\fR \fI<AG_NAME>\fR
-Required. The human friendly name for new access group.
+\fB\-\-restore\-ss=\fR<snapshot id>
+Restores a FS or specified files to previous snapshot
+state, requires:
+.br
+\fB\-\-fs\fR <file system>
+.br
+\fB\-\-file\fR <repeat for each file (optional)>
+.br
+\fB\-\-fileas\fR <restore file name (optional)>
+.br
+\fB\-\-all\fR (optional, exclusive option, restores all files
+in snapshot other options must be absent)
 .TP
-\fB--init\fR \fI<INIT_ID>\fR
-Required. The first initiator ID of new access group. WWPN or iSCSI IQN.
+\fB\-\-clone\-fs=\fR<source file system id>
+Creates a file system clone requires:
+.br
+\fB\-\-name\fR <file system clone name>
+.br
+\fB\-\-backing\-snapshot\fR <backing snapshot id> (optional)
 .TP
-\fB--sys\fR \fI<SYS_ID>\fR
-Required. The ID of system where this access group should reside on.
-
-.SS access-group-add
-Adds an initiator to an access group.
-.TP 15
-\fB--ag\fR \fI<AG_ID>\fR
-Required. ID of access group.
+\fB\-\-clone\-file=\fR<file system>
+Creates a clone of a file (thin provisioned) requires:
+.br
+\fB\-\-src\fR  <source file to clone (relative path)>
+.br
+\fB\-\-dest\fR <destination file (relative path)>
+.br
+\fB\-\-backing\-snapshot\fR <backing snapshot id> (optional)
 .TP
-\fB--init\fR \fI<INIT_ID>\fR
-Required. ID of initiator to add. WWPN or iSCSI IQN.
-
-.SS access-group-remove
-Removes an initiator from an access group.
-.TP 15
-\fB--ag\fR \fI<AG_ID>\fR
-Required. ID of access group.
+\fB\-\-delete\-volume=\fR<volume id>
+Deletes a volume given its id
 .TP
-\fB--init\fR \fI<INIT_ID>\fR
-Required. ID of initiator to remove.
-
-.SS access-group-delete
-Delete an access group.
-.TP 15
-\fB--ag\fR \fI<AG_ID>\fR
-Required. ID of access group to delete.
-
-.SS access-group-volumes
-Lists the volumes that the access group has been granted access to.
-.TP 15
-\fB--ag\fR \fI<AG_ID>\fR
-Required. The ID of access group to query.
-
-.SS iscsi-chap
-Configures ISCSI inbound/outbound CHAP authentication.
-.TP 15
-\fB--init\fR \fI<INIT_ID>\fR
-Required. The ID of iSCSI initiator to configure.
+\fB\-\-delete\-ss=\fR<snapshot id>
+Deletes a snapshot requires \fB\-\-fs\fR
 .TP
-\fB--in-user\fR \fI<IN_USER>\fR
-Optional. Inbound CHAP user name.
+\fB\-r\fR <volume id>, \fB\-\-replicate\-volume=\fR<volume id>
+replicates a volume, requires:
+.br
+\fB\-\-type\fR [SNAPSHOT|CLONE|COPY|MIRROR_ASYNC|MIRROR_SYNC]
+.br
+\fB\-\-name\fR <human name>
+.br
+Optional:
+.br
+\fB\-\-pool\fR <pool id> (Plugin choice if absent)
+.br
 .TP
-\fB--in-pass\fR \fI<IN_PASS>\fR
-Optional. Inbound CHAP password.
+\fB\-\-replicate\-volume\-range\-block\-size=\fR<system id>
+size of each replicated block in bytes
 .TP
-\fB--out-user\fR \fI<OUT_USER>\fR
-Optional. Outbound CHAP user name.
+\fB\-\-replicate\-volume\-range=\fR<volume id>
+Replicates a portion of a volume, requires:
+.br
+\fB\-\-type\fR [SNAPSHOT|CLONE|COPY|MIRROR]
+.br
+\fB\-\-dest\fR <destination volume>
+.br
+\fB\-\-src_start\fR <source block start number>
+.br
+\fB\-\-dest_start\fR <destination block start>
+.br
+\fB\-\-count\fR <number of blocks to replicate>
 .TP
-\fB--out-pass\fR \fI<OUT_PASS>\fR
-Optional. Outbound CHAP password.
-
-.SS fs-create
-Creates a filesystem.
-.TP 15
-\fB--name\fR \fI<NAME>\fR
-Required. Human friendly name for new filesystem.
+\fB\-\-iscsi\-chap=\fR<initiator id>
+configures ISCSI inbound/outbound CHAP authentication
+.br
+Optional:
+.br
+\fB\-\-in\-user\fR <inbound CHAP user name>
+.br
+\fB\-\-in\-password\fR <inbound CHAP password>
+.br
+\fB\-\-out\-user\fR <outbound CHAP user name>
+.br
+\fB\-\-out\-password\fR <inbound CHAP user password
 .TP
-\fB--size\fR \fI<SIZE>\fR
-Required. Volume size(See \fBSIZE OPTION\fR for allowed formats).
+\fB\-\-access\-grant=\fR<initiator id>
+Grants access to an initiator to a volume
+requires:
+.br
+\fB\-\-type\fR <initiator id type>
+.br
+\fB\-\-volume\fR <volume id>
+.br
+\fB\-\-access\fR [RO|RW], read\-only or read\-write
 .TP
-\fB--pool\fR \fI<POOL_ID>\fR
-Required. ID of pool to hold the new filesystem.
-
-.SS fs-delete
-Delete a filesystem.
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. ID of the filesystem to delete.
-
-.SS fs-resize
-Resizes a filesystem.
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. ID of the filesystem to resize.
+\fB\-\-access\-grant\-group=\fR<access group id>
+Grants access to an access group to a volume
+requires:
+.br
+\fB\-\-volume\fR <volume id>
+.br
+\fB\-\-access\fR [RO|RW], read\-only or read\-write
 .TP
-\fB--size\fR \fI<NEW_SIZE>\fR
-Required. New size of filesystem. See \fBSIZE OPTION\fR for allowed
-formats.
-
-.SS fs-export
-Export a filesystem via NFS.
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. ID of the filesystem to export.
+\fB\-\-access\-revoke=\fR<initiator id>
+Removes access for an initiator to a volume
+requires:
+.br
+\fB\-\-volume\fR <volume id>
 .TP
-\fB--exportpath\fR \fI<EXPORT_PATH>\fR
-Optional. NFS server export path. e.g. '/foo/bar'.
+\fB\-\-access\-revoke\-group=\fR<access group id>
+Removes access for access group to a volume
+requires:
+.br
+\fB\-\-volume\fR <volume id>
+.br
 .TP
-\fB--anonuid\fR \fI<ANONY_UID>\fR
-Optional. The UID(User ID) to map to anonymous user.
+\fB\-\-resize\-volume=\fR<volume id>
+Re\-sizes a volume, requires:
+.br
+\fB\-\-size\fR <new size>
 .TP
-\fB--anongid\fR \fI<ANONY_GID>\fR
-Optional. The GID(Group ID) to map to anonymous user.
+\fB\-\-resize\-fs=\fR<fs id>
+Re\-sizes a file system, requires:
+.br
+\fB\-\-size\fR <new size>
 .TP
-\fB--auth-type\fR \fI<AUTH_TYPE>\fR
-Optional. NFS client authentication type. This is just a place holder, not
-supported yet.
+\fB\-\-nfs\-export\-remove=\fR<nfs export id>
+Removes a nfs export
 .TP
-\fB--root-host\fR \fI<ROOT_HOST>\fR
-Optional. Repeatable. The host/IP has root access. For two or more hosts/IPs:
-'\fB--root-host hostA --root-host hostB\fR'.
+\fB\-\-nfs\-export\-fs=\fR<file system id>
+creates a nfs export
+.br
+Optional:
+.br
+\fB\-\-exportpath\fR e.g. /foo/bar.
+.br
+Note: root, ro, rw are to be repeated for each host
+.br
+\fB\-\-root\fR <no_root_squash host>
+.br
+\fB\-\-ro\fR <read only host>
+.br
+\fB\-\-rw\fR <read/write host>
+.br
+\fB\-\-anonuid\fR <uid to map to anonymous>
+.br
+\fB\-\-anongid\fR <gid to map to anonymous>
+.br
+\fB\-\-auth\-type\fR <NFS client authentication type>
 .TP
-\fB--ro-host\fR \fI<RO_HOST>\fR
-Optional. Repeatable. The host/IP has read only access. For two or more
-hosts/IPs: '\fB--ro-host hostA --ro-host hostB\fR'.
+\fB\-\-job\-status=\fR<job status id>
+retrieve information about job
 .TP
-\fB--rw-host\fR \fI<RW_HOST>\fR
-Optional. The host/IP has read/write access. For two or more hosts/IPs:
-'\fB--rw-host hostA --rw-host hostB\fR'.
-
-.SS fs-unexport
-Remove an NFS export.
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. ID of the filesystem to unexport.
-
-.SS fs-clone
-Creates a file system clone. The 'clone' means point in time read writeable
-space efficient copy of data, AKA. read-writable snapshot.
-.TP 15
-\fB--src-fs\fR \fI<SRC_FS_ID>\fR
-Required. The ID of the filesystem to clone.
+\fB\-\-volume\-dependants=\fR<volume id>
+Returns True if volume has a dependant child
 .TP
-\fB--dst-name\fR \fI<DST_FS_NAME>\fR
-Required. The name for newly created destination file system.
+\fB\-\-volume\-dependants\-rm=\fR<volume id>
+Removes dependencies
 .TP
-\fB--backing-snapshot\fR \fI<BE_SS_ID>\fR
-Optional. Make a FS clone using a previously created snapshot.
-
-.SS fs-snap-create
-Creates a snapshot of specified filesystem.  A snapshot is defined as a read only
-space efficient point in time copy (PIT) of a filesystem.  The source filesystem
-remains modifiable.
-.TP 15
-\fB--name\fR \fI<SNAP_NAME>\fR
-Required. The human friendly name of new snapshot.
+\fB\-\-fs\-dependants=\fR<fs id>
+Returns true if a child dependency exists.
+.br
+\fB\-\-file\fR <file> for File check (optional)
 .TP
-\fB--fs\fR \fI<FS_ID>\fR
-Required. The ID of filesystem to create snapshot against.
-
-.SS fs-snap-delete
-Deletes a snapshot.
-.TP 15
-\fB--snap\fR \fI<SNAP_ID>\fR
-Required. The ID of snapshot to delete.
-.TP
-\fB--fs\fR \fI<FS_ID>\fR
-Required. The ID of filesystem.
-
-.SS fs-snap-restore
-Restores a FS or specified files to previous snapshot state. This will discard
-all the changes to filesystem since snapshot if specific files are not specified in restore.
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. The ID of filesystem to restore.
-.TP
-\fB--snap\fR \fI<SNAP_ID>\fR
-Required. The ID of snapshot to restore.
-.TP
-\fB--file\fR \fI<FILE_PATH>\fR
-Optional. Repeatable. With this option defined, will only restore the defined
-file(s).
-'\fB--file fileA --file pathB\fR'.
-.TP
-\fB--fileas\fR \fI<NEW_FILE_PATH>\fR
-Optional. Repeatable. With this option defined, the restored file will be
-saved to specified path and filename, eg. '\fB--file fileA --fileas old_fileA \fR'.
-
-.SS fs-dependants
-Returns True if a child dependency (snapshot or clone) exists.
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. The ID of filesystem to query.
-.TP
-\fB--file\fR \fI<FILE_PATH>\fR
-Optional. Repeatable. Only check for dependencies on specific file(s), eg. '\fB--file fileA --file pathB\fR'.
-
-.SS fs-dependants-rm
-Removes filesystem dependencies(snapshot or clone).
-.TP 15
-\fB--fs\fR \fI<FS_ID>\fR
-Required. The ID of filesystem to remove dependency.
-.TP
-\fB--file\fR \fI<FILE_PATH>\fR
-Optional. Repeatable. Only remove dependencies on specific file(s), eg. '\fB--file fileA --file pathB\fR'.
-
-.SS file-clone
-Creates a clone of a file (thin provisioned).  Note: --src and --dst need to be paired
- eg. '\fB--src fileA --src fileB --dst fileA_clone --dst fileB_clone\fR'.
-.TP 15
-\fB--src\fR \fI<SRC_FILE_PATH>\fR
-Required. Repeatable. Source file to clone (relative path).
-.TP
-\fB--dst\fR \fI<DST_FILE_PATH>\fR
-Required. Repeatable. Destination file for clone (relative path).
-
+\fB\-\-fs\-dependants\-rm=\fR<fs id>
+Removes dependencies
+.br
+\fB\-\-file\fR <file> for File check (optional)
 .IP
-.SH ALIAS
-.SS ls
-Alias of 'list --type systems'
-.SS lp
-Alias of 'list --type pools'
-.SS lv
-Alias of 'list --type volumes'
-.SS ld
-Alias of 'list --type disks'
-.SS la
-Alias of 'list --type access_groups'
-.SS lf
-Alias of 'list --type fs'
-.SS lt
-Alias of 'list --type target_ports'
-.SS c
- Alias of 'capabilities'
-.SS p
- Alias of 'plugin-info'
-.SS vc
-Alias of 'volume-create'
-.SS vd
-Alias of 'volume-delete'
-.SS vr
-Alias of 'volume-resize'
-.SS vm
-Alias of 'volume-mask'
-.SS vu
-Alias of 'volume-unmask'
-.SS ac
-Alias of 'access-group-create'
-.SS aa
-Alias of 'access-group-add'
-.SS ar
-Alias of 'access-group-remove'
-.SS ad
-Alias of 'access-group-delete'
-
-.IP
-.SH SIZE OPTION
-.SS \fB--size\fR \fI\fI<SIZE>\fR\fR
-Storage space size. Format is '\fI<number>\fR' + '\fI<prefix>\fR'. Example:
-"10GiB", "20.5MB". No postfix indicates bytes. Valid prefixes are:
-    KiB,                    # 2^10 Bytes
-    MiB,                    # 2^20 Bytes
-    GiB,                    # 2^30 Bytes
-    TiB,                    # 2^40 Bytes
-    PiB,                    # 2^50 Bytes
-    EiB,                    # 2^60 Bytes
-    KB,                     # 10^3 Bytes
-    MB,                     # 10^6 Bytes
-    GB,                     # 10^9 Bytes
-    TB,                     # 10^12 Bytes
-    PB,                     # 10^15 Bytes
-    EB,                     # 10^17 Bytes
-
-These prefixes are supported also, but not recommended:
-    K, M, G, T, P, E,       # equal to KiB, MiB, and etc
-    k, m, g, t, p, e,       # equal to KiB, MiB, and etc
-
+.SH COMMAND OPTIONS
+.TP
+\fB\-\-size\fR=\fIsize\fR
+size (Can use B, K, M, G, T, P postfix, IEC sizing) No postfix indicates bytes
+.TP
+\fB\-\-pool\fR=\fIpool\fR id
+pool ID
+.TP
+\fB\-\-provisioning\fR=\fIPROVISIONING\fR
+[DEFAULT|THIN|FULL]
+.TP
+\fB\-\-type\fR=\fItype\fR
+type specifier
+.TP
+\fB\-\-name\fR=\fIname\fR
+human readable name
+.TP
+\fB\-\-volume\fR=\fIvolume\fR
+volume ID
+.TP
+\fB\-\-access\fR=\fIaccess\fR
+[RO|RW], read\-only or read\-write access
+.TP
+\fB\-\-id\fR=\fIinitiator\fR id
+initiator id
+.TP
+\fB\-\-system\fR=\fIsystem\fR id
+system id
+.TP
+\fB\-\-backing\-snapshot=\fR<backing snapshot>
+backing snap shot name for operation
+.TP
+\fB\-\-src=\fR<source file>
+source of operation
+.TP
+\fB\-\-dest=\fR<source file>
+destination of operation
+.TP
+\fB\-\-file=\fR<file>
+file to include in operation, option can be repeated
+.TP
+\fB\-\-fileas=\fR<fileas>
+file to be renamed as, option can be repeated
+.TP
+\fB\-\-fs=\fR<file system>
+file system of interest
+.TP
+\fB\-\-exportpath=\fR<path for export>
+desired export path on array
+.TP
+\fB\-\-root=\fR<no_root_squash_host>
+list of hosts with no_root_squash
+.TP
+\fB\-\-ro=\fR<read only host>
+list of hosts with read/only access
+.TP
+\fB\-\-rw=\fR<read/write host>
+list of hosts with read/write access
+.TP
+\fB\-\-anonuid=\fR<anonymous uid>
+uid to map to anonymous
+.TP
+\fB\-\-anongid=\fR<anonymous uid>
+gid to map to anonymous
+.TP
+\fB\-\-authtype=\fR<type>
+NFS client authentication type
+.TP
+\fB\-\-all\fR
+specify all in an operation
+.TP
+\fB\-\-src_start=\fR<source block start>
+source block address to replicate
+.TP
+\fB\-\-dest_start=\fR<dest. block start>
+destination block address to replicate
+.TP
+\fB\-\-count=\fR<block count>
+number of blocks to replicate
+.TP
+\fB\-\-in\-user=\fR<username>
+CHAP inbound user name
+.TP
+\fB\-\-in\-password=\fR<password>
+CHAP inbound password
+.TP
+\fB\-\-out\-user=\fR<out_user>
+CHAP outbound user name
+.TP
+\fB\-\-out\-password=\fR<out_password>
+CHAP outbound password
+.PP
 .SH FILES
-.TP 15
+.TP
 ~/.lsmcli
 lsmcli configuration file, containing name-value pairs separated
 by '='. The only currently supported configuration option is 'uri',
@@ -620,99 +398,10 @@ such as 'uri=ontap://user@filer.example.com'.
 
 Configuration options in .lsmcli are only used if not overridden by
 command-line option or environment variable.
-
-.SH EXAMPLES (command output omitted for brevity)
-.TP 15
-Simulator, list pools (no password required)
-$ lsmcli -u sim:// -l POOLS
-.TP 15
-NetApp, list volumes (prompting for password)
-$ lsmcli -u ontap://root@host/ -l VOLUMES -P
-.TP 15
-SMI-S, list systems (prompting for password)
-.nf
-$ lsmcli -u smispy://username@host:5988/?namespace=root/interop \\
-        -l SYSTEMS -P
-.fi
-.TP 15
-Targetd, list pools (using env variables for URI and password)
-$ export LSMCLI_URI=targetd://username@host:18700
-.br
-$ export LSMCLI_PASSWORD=\fI<password>\fR
-.br
-$ lsmcli -l POOLS
-.TP 15
-NexentaStor, create volume (using environment variables for URI and password)
-.nf
-$ export LSMCLI_URI='nstor://user@host'
-$ export LSMCLI_PASSWORD=\fI<password>\fR
-$ lsmcli volume-create --name volume_name --size 1TiB --pool default
-.fi
-.TP 15
-SMI-S, create volume (using environment variables for URI and password)
-.nf
-$ export LSMCLI_URI='smispy+ssl://user@host:5989?namespace=root/emc'
-$ export LSMCLI_PASSWORD=\fI<password>\fR
-$ lsmcli volume-create --name volume_name --size 1TiB --pool default
-.fi
-
-.SH ENVIRONMENT
-.TP 17
-LSMCLI_URI
-The URI for the storage array in question.
-.TP 17
-LSMCLI_PASSWORD
-The password to use for the array.
-
-.SH VOLUME REPLICATION TYPES
-.TP 17
-CLONE
-A point in time, read writeable, space efficent copy of data.
-.TP 17
-COPY
-A full bitwise copy of the data. It occupies the full space.
-.TP 17
-MIRROR_SYNC
-Continously updated, realtime with both copies having identical data.
-.TP 17
-MIRROR_ASYNC
-Continously updated, with a varying amount of delay and data delta
-between the source and target.
-
-
-.SH NOTES
-.TP 8
-Plugin installation
-Plugins are installed individually except for the simulators which are always
-included.
-
-.TP 8
-Secure sockets layer (SSL)
-All of the plugins (except the simulator) support SSL when communicating from
-the plugin to the array.  This is accomplished by adding "+ssl" to the plugin
-and usually by selecting a different port number from non-SSL communications.
-.br
-.nf
-$ lsmcli -u smispy+ssl://username@host:5989/?namespace=interop \\
-        list --type SYSTEMS -P
-.fi
-
-.TP 8
-SSL error: certificate verify failed
-When using SMI-S plugin with SSL against self-signed SMI-S provider, lsmcli
-normally quit with '\fBSSL error: certificate verify failed\fR'. Please
-contact SMI-S provider support to setup the self-signed certificate in your
-system. If you prefer to bypass the certificate check, add 'no_ssl_verify=yes'
-at the end of URI, for example:
-.RS 12
-.nf
-\fBsmispy+ssl://admin@emc-smi:5989?namespace=root/emc&no_ssl_verify=yes\fR
-.fi
-
 .SH BUGS
-Please report bugs to
-\fI<libstoragemgmt-devel@lists.sourceforge.net>\fR
+Please report bugs to 
+<libstoragemgmt\-devel@lists.sourceforge.net>
 .SH AUTHOR
-Tony Asleson \fI<tasleson@redhat.com>\fR
-.br
-Gris Ge \fI<fge@redhat.com>\fR
+Tony Asleson <tasleson@redhat.com>
+
+.PP
