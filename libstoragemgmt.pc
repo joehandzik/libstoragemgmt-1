@@ -4,7 +4,7 @@ libdir=${exec_prefix}/lib
 includedir=${prefix}/include/libstoragemgmt
 
 Name: libstoragemgmt
-Version: 0.0.20
+Version: 1.1.0
 Description: Storage array management library
 Requires:
 Libs: -L${libdir} -lstoragemgmt 

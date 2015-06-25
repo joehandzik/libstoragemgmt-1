@@ -4,7 +4,7 @@ ACLOCAL_AMFLAGS = -I m4
 
 DISTCHECK_CONFIGURE_FLAGS = --with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir)
 
-SUBDIRS= src plugin doc include tools lsm packaging
+SUBDIRS= c_binding python_binding plugin doc tools daemon packaging
 
 if BUILD_C_UNIT
 SUBDIRS += test
@@ -13,8 +13,7 @@ endif
 EXTRA_DIST = \
 	libstoragemgmt.pc.in \
 	libstoragemgmt.pc \
-	libstoragemgmt.spec.in \
-	libstoragemgmt.spec
+	autogen.sh
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libstoragemgmt.pc
