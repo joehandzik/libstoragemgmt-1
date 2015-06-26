@@ -1,3 +1,23 @@
+libstoragemgmt (1.1.0-1) unstable; urgency=medium
+
+  [ vaidyanath ]
+  * [413d404] Imported Upstream version 1.1.0
+  * [42fa020] Refresh patch debian/patches/fix-build-lsm-tests.patch
+  * [63566a5] Drop patch -fix-build-warning-format-error.patch
+  * [a727373] Add libssl-dev as build dependency
+  * [ee6eee6] Add python-yaml as build dependency
+  * [b58dd55] Add libmicrohttpd-dev as build dependency
+  * [04aaf09] Add libjson-c-dev as build dependency
+  * [89c4ca5] Add dh-python as build dependency
+  * [3bdfe79] Add License: LGPL-2.1+
+
+  [ Ritesh Raj Sarraf ]
+  * [6b915d7] Use autoreconf.
+    Thanks to Brahadambal Srinivasan (Closes: #757216)
+  * [ef65916] Update gbp.conf of the deprecation warning
+
+ -- vaidyanath <vaidyanath.m@gmail.com>  Fri, 26 Jun 2015 17:51:16 +0530
+
 libstoragemgmt (0.0.20-2) unstable; urgency=medium
 
   * [6edc8d9] Restrict build to Linux platforms only
