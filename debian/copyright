@@ -1,7 +1,7 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: libstoragemgmt
 Upstream-Contact: Tony Asleson <tasleson@redhat.com>
-Source: http://sourceforge.net/projects/libstoragemgmt/
+Source: https://github.com/libstorage/libstoragemgmt
 
 Files: *
 Copyright: 2011 - 2012 Red Hat, Inc.

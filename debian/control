@@ -4,7 +4,7 @@ Maintainer: Ritesh Raj Sarraf <rrs@debian.org>
 Build-Depends: debhelper (>= 8.0.0), libyajl-dev, autoconf, automake, libtool, libxml2-dev, pkg-config, check, python (>= 2.6.6-3~), python-pywbem, libglib2.0-dev (>= 2.22.5), python-m2crypto, dpkg-dev (>= 1.16.1~), libssl-dev, python-yaml, libmicrohttpd-dev, libjson-c-dev, dh-python, dh-autoreconf
 Standards-Version: 3.9.2
 Section: libs
-Homepage: http://sourceforge.net/apps/trac/libstoragemgmt/
+Homepage: https://github.com/libstorage/libstoragemgmt
 Vcs-Git: git://anonscm.debian.org/collab-maint/libstoragemgmt.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/libstoragemgmt.git;a=summary
 
