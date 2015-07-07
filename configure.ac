@@ -2,7 +2,9 @@ dnl Process this file with autoconf to produce a configure script.
 dnl Copyright (C) 2011 Red Hat, Inc.
 dnl See COPYING.LIB for the License of this software
 
-AC_INIT([libstoragemgmt], [1.1.0], [libstoragemgmt-devel@lists.sourceforge.net], [], [http://sourceforge.net/projects/libstoragemgmt/])
+AC_INIT(
+    [libstoragemgmt], [1.2.3], [libstoragemgmt-devel@lists.fedorahosted.org],
+    [], [https://github.com/libstorage/libstoragemgmt/])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_HEADERS([config.h])
@@ -160,7 +162,6 @@ AM_PATH_PYTHON([2.6], [], AC_MSG_ERROR([Python interpreter 2.6 or 2.7 required])
 AC_PYTHON_MODULE([pywbem], [Required])
 AC_PYTHON_MODULE([M2Crypto], [Required])
 AC_PYTHON_MODULE([argparse], [Required])
-AC_PYTHON_MODULE([yaml], [Required])
 
 dnl ==========================================================================
 dnl Check for libmicrohttpd and json-c as it is needed for REST API daemon
@@ -180,6 +181,73 @@ if test "x$with_rest_api" = "xyes"; then
     ])
 fi
 AM_CONDITIONAL([WITH_REST_API], [test "x$with_rest_api" = "xyes"])
+
+dnl ==========================================================================
+dnl Add option '--without-megaraid' to exclude megaraid plugin.
+dnl ==========================================================================
+
+AC_ARG_WITH([megaraid],
+    [AS_HELP_STRING([--without-megaraid],
+        [Do not build the MegaRAID plugin])],
+    [],
+    [with_megaraid=yes])
+
+AM_CONDITIONAL([WITH_MEGARAID], [test "x$with_megaraid" = "xyes"])
+
+dnl ==========================================================================
+dnl Add option '--without-hpsa' to exclude hpsa plugin.
+dnl ==========================================================================
+
+AC_ARG_WITH([hpsa],
+    [AS_HELP_STRING([--without-hpsa],
+        [Do not build the HP SmartArray plugin])],
+    [],
+    [with_hpsa=yes])
+
+AM_CONDITIONAL([WITH_HPSA], [test "x$with_hpsa" = "xyes"])
+
+dnl ==========================================================================
+dnl Check for libconfig as it is needed for lsmd daemon
+dnl ==========================================================================
+PKG_CHECK_MODULES(
+    [LIBCONFIG], [libconfig >= 1.3.2],,
+    AC_MSG_ERROR([libconfig 1.3.2 or newer not found.])
+)
+
+dnl ==========================================================================
+dnl Add option '--without-bash-completion' to exclude bash completion script.
+dnl ==========================================================================
+
+AC_ARG_WITH([bash-completion],
+    [AS_HELP_STRING([--without-bash-completion],
+        [Do not install the bash auto-completion script])],
+    [],
+    [with_bash_completion=yes])
+
+AM_CONDITIONAL(
+    [WITH_BASH_COMPLETION], [test "x$with_bash_completion" = "xyes"])
+
+dnl ==========================================================================
+dnl Add option '--with-bash-completion-dir' to specific bash completion dir,
+dnl if not defined, if pkg-config file for bash-completion found, use its
+dnl 'completionsdir', else use /etc/bash_completion.d
+dnl ==========================================================================
+AC_ARG_WITH([bash-completion-dir],
+    AS_HELP_STRING(
+        [--with-bash-completion-dir=DIR],
+        [Bash completions directory]),
+        [],
+        [AS_IF(
+            [$($PKG_CONFIG --exists bash-completion)],
+            [with_bash_completion_dir=$(
+                $PKG_CONFIG --variable=completionsdir bash-completion)],
+            # EPEL 6 is still shipping bash-completion version 1.x
+            # which does not provide pkg-config support.
+            # So, for EPEL 6 or anyone not installed bash-compeltion, we
+            # use fallback folder '/etc/bash_completion.d'
+            [with_bash_completion_dir=$sysconfdir/bash_completion.d])])
+
+AC_SUBST([bashcompletiondir], [$with_bash_completion_dir])
 
 #Setup the unit directory for systemd stuff
 PKG_PROG_PKG_CONFIG
@@ -201,15 +269,28 @@ AC_OUTPUT(libstoragemgmt.pc \
           python_binding/lsm/version.py \
           plugin/Makefile \
           plugin/simc/Makefile \
+          plugin/megaraid/Makefile \
+          plugin/hpsa/Makefile \
           daemon/Makefile \
+          config/Makefile \
           doc/Makefile \
           doc/man/lsmcli.1 \
           doc/man/lsmd.1 \
+          doc/man/sim_lsmplugin.1 \
+          doc/man/simc_lsmplugin.1 \
+          doc/man/smispy_lsmplugin.1 \
+          doc/man/ontap_lsmplugin.1 \
+          doc/man/targetd_lsmplugin.1 \
+          doc/man/nstor_lsmplugin.1 \
           doc/doxygen.conf \
+          doc/man/lsmd.conf.5 \
+          doc/man/megaraid_lsmplugin.1 \
+          doc/man/hpsa_lsmplugin.1 \
           tools/Makefile \
           tools/udev/Makefile \
           tools/lsmcli/Makefile \
           tools/utility/Makefile \
+          tools/bash_completion/Makefile \
           packaging/Makefile \
           packaging/daemon/Makefile \
           packaging/libstoragemgmt.spec \

@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
 
@@ -265,7 +264,7 @@ def cim_init_path_check_or_create(smis_common, system_id, init_id, init_type):
 
 
 def cim_vols_masked_to_cim_spc_path(smis_common, cim_spc_path,
-                                   property_list=None):
+                                    property_list=None):
     """
     Use this association to find out masked volume for certain cim_spc:
         CIM_SCSIProtocolController

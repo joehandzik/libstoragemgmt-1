@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 #         Gris Ge <fge@redhat.com>
@@ -29,7 +28,6 @@ class SimPlugin(INfs, IStorageAreaNetwork):
     def __init__(self):
         self.uri = None
         self.password = None
-        self.tmo = 0
         self.sim_array = None
 
     def plugin_register(self, uri, password, timeout, flags=0):
@@ -41,14 +39,14 @@ class SimPlugin(INfs, IStorageAreaNetwork):
         qp = uri_parse(uri)
         if 'parameters' in qp and 'statefile' in qp['parameters'] \
                 and qp['parameters']['statefile'] is not None:
-            self.sim_array = SimArray(qp['parameters']['statefile'])
+            self.sim_array = SimArray(qp['parameters']['statefile'], timeout)
         else:
-            self.sim_array = SimArray()
+            self.sim_array = SimArray(None, timeout)
 
         return None
 
     def plugin_unregister(self, flags=0):
-        self.sim_array.save_state()
+        pass
 
     def job_status(self, job_id, flags=0):
         return self.sim_array.job_status(job_id, flags)
@@ -290,3 +288,17 @@ class SimPlugin(INfs, IStorageAreaNetwork):
         return search_property(
             [SimPlugin._sim_data_2_lsm(t) for t in sim_tgts],
             search_key, search_value)
+
+    def volume_raid_info(self, volume, flags=0):
+        return self.sim_array.volume_raid_info(volume)
+
+    def pool_member_info(self, pool, flags=0):
+        return self.sim_array.pool_member_info(pool)
+
+    def volume_raid_create_cap_get(self, system, flags=0):
+        return self.sim_array.volume_raid_create_cap_get(system)
+
+    def volume_raid_create(self, name, raid_type, disks, strip_size,
+                           flags=0):
+        return self.sim_array.volume_raid_create(
+            name, raid_type, disks, strip_size)

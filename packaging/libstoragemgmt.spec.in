@@ -1,9 +1,21 @@
 %bcond_with rest_api
+%bcond_without megaraid
+%bcond_without hpsa
+%bcond_without test
 
 # Use one-line macro for OBS workaround:
 #   https://bugzilla.novell.com/show_bug.cgi?id=864323
 %{?_with_rest_api: %global with_rest_api 1 }
 %{?_without_rest_api: %global with_rest_api 0 }
+
+%{?_with_megaraid: %global with_megaraid 1 }
+%{?_without_megaraid: %global with_megaraid 0 }
+
+%{?_with_hpsa: %global with_hpsa 1 }
+%{?_without_hpsa: %global with_hpsa 0 }
+
+%{?_with_test: %global with_test 1 }
+%{?_without_test: %global with_test 0 }
 
 %define libsoname libstoragemgmt
 
@@ -40,8 +52,8 @@ License:        LGPL-2.1+
 %else
 License:        LGPLv2+
 %endif
-URL:            http://sourceforge.net/projects/libstoragemgmt/
-Source0:        http://sourceforge.net/projects/libstoragemgmt/files/libstoragemgmt-%{version}.tar.gz
+URL:            https://github.com/libstorage/libstoragemgmt/
+Source0:        https://github.com/libstorage/libstoragemgmt/releases/download/%{version}/libstoragemgmt-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Requires:       %{libstoragemgmt}-python
 BuildRequires:  autoconf automake libtool libxml2-devel check-devel perl
@@ -50,13 +62,12 @@ BuildRequires:  python-argparse
 BuildRequires:  glib2-devel
 # Explicitly require gcc-c++ is for OBS
 BuildRequires:  gcc-c++
+BuildRequires:  libconfig-devel
 %if 0%{?suse_version}
 BuildRequires:  libyajl-devel
-BuildRequires:  python-PyYAML
 %else
 # Fedora RHEL
 BuildRequires:  yajl-devel
-BuildRequires:  PyYAML
 %endif
 
 %if 0%{?do_fdupes}
@@ -65,6 +76,9 @@ BuildRequires:  fdupes
 
 %if 0%{?rhel} == 6
 BuildRequires:  python-ordereddict
+%else
+# Require bash-completion > 2.0
+BuildRequires:  bash-completion >= 2.0
 %endif
 
 %if 0%{?with_systemd}
@@ -208,6 +222,31 @@ the %{libstoragemgmt}-rest package contains the http daemon for
 %{libstoragemgmt} rest api.
 %endif
 
+
+%if 0%{?with_megaraid}
+%package        -n %{libstoragemgmt}-megaraid-plugin
+Summary:        Files for LSI MegaRAID support for %{libstoragemgmt}
+Group:          System Environment/Libraries
+Requires:       %{libstoragemgmt}%{?_isa} = %{version}-%{release}
+BuildArch:      noarch
+
+%description    -n %{libstoragemgmt}-megaraid-plugin
+The %{libstoragemgmt}-megaraid-plugin package contains the plugin for LSI
+MegaRAID storage management via storcli.
+%endif
+
+%if 0%{?with_hpsa}
+%package        -n %{libstoragemgmt}-hpsa-plugin
+Summary:        Files for HP SmartArray support for %{libstoragemgmt}
+Group:          System Environment/Libraries
+Requires:       %{libstoragemgmt}%{?_isa} = %{version}-%{release}
+BuildArch:      noarch
+
+%description    -n %{libstoragemgmt}-hpsa-plugin
+The %{libstoragemgmt}-hpsa-plugin package contains the plugin for HP
+SmartArray storage management via hpssacli.
+%endif
+
 %prep
 %setup -q
 
@@ -217,6 +256,12 @@ the %{libstoragemgmt}-rest package contains the http daemon for
 %configure \
 %if 0%{?with_rest_api} != 1
     --without-rest-api \
+%endif
+%if 0%{?with_megaraid} != 1
+    --without-megaraid \
+%endif
+%if 0%{?with_hpsa} != 1
+    --without-hpsa \
 %endif
     --disable-static
 
@@ -265,12 +310,14 @@ install -m 755 tools/udev/scan-scsi-target \
 %clean
 rm -rf %{buildroot}
 
+%if 0%{?with_test}
 %check
 if ! make check
 then
   cat test/test-suite.log || true
   exit 1
 fi
+%endif
 
 %pre -n %{libstoragemgmt}
 if [ $1 -eq 1 ]; then
@@ -414,15 +461,59 @@ if [ $1 -eq 0 ]; then
         >/dev/null 2>&1 || :
 fi
 
+%if 0%{?with_megaraid}
+# Need to restart lsmd if plugin is new installed or removed.
+%post -n %{libstoragemgmt}-megaraid-plugin
+if [ $1 -eq 1 ]; then
+    # New install.
+    /usr/bin/systemctl try-restart libstoragemgmt.service \
+        >/dev/null 2>&1 || :
+fi
+%postun -n %{libstoragemgmt}-megaraid-plugin
+if [ $1 -eq 0 ]; then
+    # Remove
+    /usr/bin/systemctl try-restart libstoragemgmt.service \
+        >/dev/null 2>&1 || :
+fi
+%endif
+
+%if 0%{?with_hpsa}
+# Need to restart lsmd if plugin is new installed or removed.
+%post -n %{libstoragemgmt}-hpsa-plugin
+if [ $1 -eq 1 ]; then
+    # New install.
+    /usr/bin/systemctl try-restart libstoragemgmt.service \
+        >/dev/null 2>&1 || :
+fi
+%postun -n %{libstoragemgmt}-hpsa-plugin
+if [ $1 -eq 0 ]; then
+    # Remove
+    /usr/bin/systemctl try-restart libstoragemgmt.service \
+        >/dev/null 2>&1 || :
+fi
+%endif
+
 %files -n %{libstoragemgmt}
 %defattr(-,root,root,-)
 %doc README COPYING.LIB
 %{_mandir}/man1/lsmcli.1*
 %{_mandir}/man1/lsmd.1*
+%{_mandir}/man5/lsmd.conf.5*
 %{_libdir}/*.so.*
 %{_bindir}/lsmcli
 %{_bindir}/lsmd
 %{_bindir}/simc_lsmplugin
+%{_sysconfdir}/lsm/lsmd.conf
+%dir %{_sysconfdir}/lsm
+%dir %{_sysconfdir}/lsm/pluginconf.d
+%{_mandir}/man1/simc_lsmplugin.1*
+
+%if 0%{?rhel} == 6
+%{_sysconfdir}/bash_completion.d/lsmcli
+%else
+%{_datadir}/bash-completion/completions/lsmcli
+%endif
+
 
 %if 0%{?with_systemd}
 %{_unitdir}/libstoragemgmt.service
@@ -465,6 +556,8 @@ fi
 %{python_sitelib}/lsm/lsmcli/data_display.*
 %{python_sitelib}/lsm/lsmcli/cmdline.*
 %{_bindir}/sim_lsmplugin
+%{_sysconfdir}/lsm/pluginconf.d/sim.conf
+%{_mandir}/man1/sim_lsmplugin.1*
 
 %files -n %{libstoragemgmt}-smis-plugin
 %defattr(-,root,root,-)
@@ -481,6 +574,7 @@ fi
 %{python_sitelib}/lsm/plugin/smispy/smis_vol.*
 %{python_sitelib}/lsm/plugin/smispy/smis_ag.*
 %{_bindir}/smispy_lsmplugin
+%{_mandir}/man1/smispy_lsmplugin.1*
 
 %files -n %{libstoragemgmt}-netapp-plugin
 %defattr(-,root,root,-)
@@ -489,6 +583,7 @@ fi
 %{python_sitelib}/lsm/plugin/ontap/na.*
 %{python_sitelib}/lsm/plugin/ontap/ontap.*
 %{_bindir}/ontap_lsmplugin
+%{_mandir}/man1/ontap_lsmplugin.1*
 
 %files -n %{libstoragemgmt}-targetd-plugin
 %defattr(-,root,root,-)
@@ -496,6 +591,7 @@ fi
 %{python_sitelib}/lsm/plugin/targetd/__init__.*
 %{python_sitelib}/lsm/plugin/targetd/targetd.*
 %{_bindir}/targetd_lsmplugin
+%{_mandir}/man1/targetd_lsmplugin.1*
 
 %files -n %{libstoragemgmt}-nstor-plugin
 %defattr(-,root,root,-)
@@ -503,6 +599,31 @@ fi
 %{python_sitelib}/lsm/plugin/nstor/__init__.*
 %{python_sitelib}/lsm/plugin/nstor/nstor.*
 %{_bindir}/nstor_lsmplugin
+%{_mandir}/man1/nstor_lsmplugin.1*
+
+%if 0%{?with_megaraid}
+%files -n %{libstoragemgmt}-megaraid-plugin
+%defattr(-,root,root,-)
+%dir %{python_sitelib}/lsm/plugin/megaraid
+%{python_sitelib}/lsm/plugin/megaraid/__init__.*
+%{python_sitelib}/lsm/plugin/megaraid/megaraid.*
+%{python_sitelib}/lsm/plugin/megaraid/utils.*
+%{_bindir}/megaraid_lsmplugin
+%{_sysconfdir}/lsm/pluginconf.d/megaraid.conf
+%{_mandir}/man1/megaraid_lsmplugin.1*
+%endif
+
+%if 0%{?with_hpsa}
+%files -n %{libstoragemgmt}-hpsa-plugin
+%defattr(-,root,root,-)
+%dir %{python_sitelib}/lsm/plugin/hpsa
+%{python_sitelib}/lsm/plugin/hpsa/__init__.*
+%{python_sitelib}/lsm/plugin/hpsa/hpsa.*
+%{python_sitelib}/lsm/plugin/hpsa/utils.*
+%{_bindir}/hpsa_lsmplugin
+%{_sysconfdir}/lsm/pluginconf.d/hpsa.conf
+%{_mandir}/man1/hpsa_lsmplugin.1*
+%endif
 
 %files udev
 %defattr(-,root,root,-)
@@ -519,6 +640,73 @@ fi
 %endif
 
 %changelog
+* Wed Jun 24 2015 Gris Ge <fge@redhat.com> 1.2.3-1
+- Bug fixes:
+    * lsmcli bash completion: Fix syntax error.
+    * lsmcli bash completion: Fix volume-delete.
+    * lsmcli bash completion: Add missing completions.
+
+* Tue Jun 23 2015 Gris Ge <fge@redhat.com> 1.2.2-1
+- Bug fixes:
+    * Fix: selinux dac_override
+    * Manpage: Update hpsa and megaraid plugin manpages.
+    * HP Smart Array Plugin: Fix pool querying on P410i.
+    * MegaRAID Plugin: Fix bug when no volume configured.
+
+* Wed Jun 17 2015 Gris Ge <fge@redhat.com> 1.2.1-1
+- Bug fix:
+    * Fix 'make distcheck' error on bash-completion.
+
+* Tue Jun 16 2015 Gris Ge <fge@redhat.com> 1.2.0-1
+- New features:
+    * The lsmd daemon now allows plugin to run as root using configure
+      file.
+    * Targetd plugin got full access group support.
+    * The simulator plugin switched from risky pickle to sqlite3 for state
+      saving.
+    * Introduced bash auto completion support for lsmcli command.
+    * Two new plugins for hardware RAID cards:
+        * LSI MegaRAID plugin -- megaraid://
+            Dell PERC and other OEM rebanded MegaRAID cards are also
+            supported.
+        * HP SmartArray plugin -- hpsa://
+- Library adds:
+    * New method to query RAID information of volume:
+        Python: lsm.Client.volume_raid_info().
+        C: lsm_volume_raid_info().
+    * New method to query pool membership:
+        Python: lsm.Client.pool_member_info().
+        C: lsm_pool_member_info().
+    * New disk status constant to indicate certain disk could be used as
+      pool disk or dedicate spare disk.
+        Python: DISK.STATUS_FREE.
+        C: LSM_DISK_STATUS_FREE.
+    * New method to create RAID volume on hardware RAID cards:
+        Python: lsm.Client.volume_raid_create_cap_get().
+                lsm.Client.volume_raid_create().
+        C: lsm_volume_raid_create_cap_get().
+           lsm_volume_raid_create().
+    * New C plugin register interface for version 1.2 new methods:
+        lsm_register_plugin_v1_2()
+- Bug fixes and miscellaneous fixes:
+    * lsmd: Fix a possible infinity loop on plugin search.
+    * Fix memory leak in C unit test.
+    * Library: Fix incorrect Volume.vpd83 definition
+    * SMI-S plugin: Fix SMI-S plugin spare disk support.
+    * SMI-S plugin: Fix target_ports() for HP 3PAR and EMC VMAX.
+    * SMI-S plugin: Fix the incorrect profile_check().
+    * Fix C library compile warning.
+    * Fix C library potential memory leak in handle_volume_raid_create().
+    * ONTAP, MegaRAID, SMI-S Plugins: Enforce the definition of Pool.status.
+    * Change license statement by replacing address to URL.
+    * lsmd: add error catch for signal.
+    * lsmcli: fix _get_item error message.
+    * C Library: Fix message loop
+    * C Library: Clean up code for DRY(don't repeat yourself).
+    * SMI-S Plugin: Collect xml during exception.
+    * C Library: Remove ambiguity between wrong type or OOM
+    * C code clean up to use K&R code style.
+    * Add Charles Rose to AUTHORS.
 * Thu Dec 4 2014 Tony Asleson <tasleson@redhat.com> 1.1.0-1
 - Library adds:
 

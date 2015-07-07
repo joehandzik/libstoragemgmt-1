@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -468,7 +467,7 @@ START_TEST(test_smoke_test)
         child_depends = lsm_volume_child_dependency_delete(c, n, &job, LSM_CLIENT_FLAG_RSVD);
         if( LSM_ERR_JOB_STARTED == child_depends ) {
             wait_for_job(c, &job);
-        } else {
+        } else if ( LSM_ERR_NO_STATE_CHANGE != child_depends) {
             fail_unless(LSM_ERR_OK == child_depends, "rc = %d", child_depends);
             fail_unless(NULL == job);
         }
@@ -692,7 +691,7 @@ START_TEST(test_access_groups)
         fail_unless( lsm_string_list_size(init_list) == 2,
                 "Expecting 2 initiators, current num = %d\n",
                 lsm_string_list_size(init_list) );
-        for( i = 0; i < lsm_string_list_size(init_list); ++i) {
+        for( i = 0; i < lsm_string_list_size(init_list) - 1; ++i) {
             printf("%d = %s\n", i, lsm_string_list_elem_get(init_list, i));
 
             printf("Deleting initiator %s from group!\n",
@@ -726,7 +725,7 @@ START_TEST(test_access_groups)
     if( count ) {
         init_list = lsm_access_group_initiator_id_get(groups[0]);
         fail_unless( init_list != NULL);
-        fail_unless( lsm_string_list_size(init_list) == 0, "%d",
+        fail_unless( lsm_string_list_size(init_list) == 1, "%d",
                         lsm_string_list_size(init_list));
         init_list = NULL;
         G(rc, lsm_access_group_record_array_free, groups, count);
@@ -885,16 +884,21 @@ START_TEST(test_fs)
         resized_fs = wait_for_job_fs(c, &job);
     }
 
-    uint8_t yes_no = 10;
-    G(rc, lsm_fs_child_dependency, c, nfs, NULL, &yes_no, LSM_CLIENT_FLAG_RSVD);
-    fail_unless( yes_no == 0);
+    if ( which_plugin == 0 ){
 
-    rc = lsm_fs_child_dependency_delete(c, nfs, NULL, &job, LSM_CLIENT_FLAG_RSVD);
-    if( LSM_ERR_JOB_STARTED == rc ) {
-        fail_unless(NULL != job);
-        wait_for_job(c, &job);
-    } else {
-        fail_unless( LSM_ERR_OK == rc);
+        uint8_t yes_no = 10;
+        G(rc, lsm_fs_child_dependency, c, nfs, NULL, &yes_no,
+          LSM_CLIENT_FLAG_RSVD);
+        fail_unless( yes_no != 0);
+
+        rc = lsm_fs_child_dependency_delete(
+            c, nfs, NULL, &job, LSM_CLIENT_FLAG_RSVD);
+        if( LSM_ERR_JOB_STARTED == rc ) {
+            fail_unless(NULL != job);
+            wait_for_job(c, &job);
+        } else {
+            fail_unless( LSM_ERR_OK == rc);
+        }
     }
 
     rc = lsm_fs_delete(c, resized_fs, &job, LSM_CLIENT_FLAG_RSVD);
@@ -2848,8 +2852,173 @@ START_TEST(test_volume_vpd_check)
     F(rc, lsm_volume_vpd83_verify, "012345678901234567890123456789ag");
     F(rc, lsm_volume_vpd83_verify, "1234567890123456789012345abcdef");
     F(rc, lsm_volume_vpd83_verify, "01234567890123456789012345abcdefa");
+    F(rc, lsm_volume_vpd83_verify, "01234567890123456789012345abcdef");
+    F(rc, lsm_volume_vpd83_verify, "55cd2e404beec32e0");
+    F(rc, lsm_volume_vpd83_verify, "55cd2e404beec32ex");
+    F(rc, lsm_volume_vpd83_verify, "55cd2e404beec32A");
+    F(rc, lsm_volume_vpd83_verify, "35cd2e404beec32A");
 
-    G(rc, lsm_volume_vpd83_verify, "01234567890123456789012345abcdef");
+    G(rc, lsm_volume_vpd83_verify, "61234567890123456789012345abcdef");
+    G(rc, lsm_volume_vpd83_verify, "55cd2e404beec32e");
+    G(rc, lsm_volume_vpd83_verify, "35cd2e404beec32e");
+    G(rc, lsm_volume_vpd83_verify, "25cd2e404beec32e");
+}
+END_TEST
+
+START_TEST(test_volume_raid_info)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = get_test_pool(c);
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_raid_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless( rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsmVolumeCreate %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+
+    lsm_volume_raid_type raid_type;
+    uint32_t strip_size, disk_count, min_io_size, opt_io_size;
+
+    G(
+        rc, lsm_volume_raid_info, c, volume, &raid_type, &strip_size,
+        &disk_count, &min_io_size, &opt_io_size, LSM_CLIENT_FLAG_RSVD);
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+    volume = NULL;
+}
+END_TEST
+
+START_TEST(test_pool_member_info)
+{
+    int rc;
+    lsm_pool **pools = NULL;
+    uint32_t poolCount = 0;
+    G(rc, lsm_pool_list, c, NULL, NULL, &pools, &poolCount,
+      LSM_CLIENT_FLAG_RSVD);
+
+    lsm_volume_raid_type raid_type;
+    lsm_pool_member_type member_type;
+    lsm_string_list *member_ids = NULL;
+
+    int i;
+    uint32_t y;
+    for (i = 0; i < poolCount; i++) {
+        G(
+            rc, lsm_pool_member_info, c, pools[i], &raid_type, &member_type,
+            &member_ids, LSM_CLIENT_FLAG_RSVD);
+        for(y = 0; y < lsm_string_list_size(member_ids); y++){
+            // Simulator user reading the member id.
+            const char *cur_member_id = lsm_string_list_elem_get(
+                member_ids, y);
+            fail_unless( strlen(cur_member_id) );
+        }
+        lsm_string_list_free(member_ids);
+    }
+    G(rc, lsm_pool_record_array_free, pools, poolCount);
+}
+END_TEST
+
+START_TEST(test_volume_raid_create_cap_get)
+{
+    if (which_plugin == 1){
+        // silently skip on simc which does not support this method yet.
+        return;
+    }
+    int rc;
+    lsm_system **sys = NULL;
+    uint32_t sys_count = 0;
+
+    G(rc, lsm_system_list, c, &sys, &sys_count, LSM_CLIENT_FLAG_RSVD);
+    fail_unless( sys_count >= 1, "count = %d", sys_count);
+
+    if( sys_count > 0 ) {
+        uint32_t *supported_raid_types = NULL;
+        uint32_t supported_raid_type_count = 0;
+        uint32_t *supported_strip_sizes = NULL;
+        uint32_t supported_strip_size_count = 0;
+
+        G(
+            rc, lsm_volume_raid_create_cap_get, c, sys[0],
+            &supported_raid_types, &supported_raid_type_count,
+            &supported_strip_sizes, &supported_strip_size_count,
+            0);
+
+        free(supported_raid_types);
+        free(supported_strip_sizes);
+
+    }
+    G(rc, lsm_system_record_array_free, sys, sys_count);
+}
+END_TEST
+
+START_TEST(test_volume_raid_create)
+{
+    if (which_plugin == 1){
+        // silently skip on simc which does not support this method yet.
+        return;
+    }
+    int rc;
+
+    lsm_disk **disks = NULL;
+    uint32_t disk_count = 0;
+
+    G(rc, lsm_disk_list, c, NULL, NULL, &disks, &disk_count, 0);
+
+    // Try to create two disks RAID 1.
+    uint32_t free_disk_count = 0;
+    lsm_disk *free_disks[2];
+    int i;
+    for (i = 0; i< disk_count; i++){
+        if (lsm_disk_status_get(disks[i]) & LSM_DISK_STATUS_FREE){
+            free_disks[free_disk_count++] = disks[i];
+            if (free_disk_count == 2){
+                break;
+            }
+        }
+    }
+    fail_unless(free_disk_count == 2, "Failed to find two free disks");
+
+    lsm_volume *new_volume = NULL;
+
+    G(rc, lsm_volume_raid_create, c, "test_volume_raid_create",
+      LSM_VOLUME_RAID_TYPE_RAID1, free_disks, free_disk_count,
+      LSM_VOLUME_VCR_STRIP_SIZE_DEFAULT, &new_volume, LSM_CLIENT_FLAG_RSVD);
+
+    char *job_del = NULL;
+    int del_rc = lsm_volume_delete(
+        c, new_volume, &job_del, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless( del_rc == LSM_ERR_OK || del_rc == LSM_ERR_JOB_STARTED,
+                "lsm_volume_delete %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == del_rc ) {
+        wait_for_job_vol(c, &job_del);
+    }
+
+    G(rc, lsm_disk_record_array_free, disks, disk_count);
+    // The new pool should be automatically be deleted when volume got
+    // deleted.
+    lsm_pool **pools = NULL;
+    uint32_t count = 0;
+    G(
+        rc, lsm_pool_list, c, "id", lsm_volume_pool_id_get(new_volume),
+        &pools, &count, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless(
+        count == 0,
+        "New HW RAID pool still exists, it should be deleted along with "
+        "lsm_volume_delete()");
+
+    lsm_pool_record_array_free(pools, count);
+
+    G(rc, lsm_volume_record_free, new_volume);
 }
 END_TEST
 
@@ -2888,6 +3057,10 @@ Suite * lsm_suite(void)
     tcase_add_test(basic, test_ss);
     tcase_add_test(basic, test_nfs_exports);
     tcase_add_test(basic, test_invalid_input);
+    tcase_add_test(basic, test_volume_raid_info);
+    tcase_add_test(basic, test_pool_member_info);
+    tcase_add_test(basic, test_volume_raid_create_cap_get);
+    tcase_add_test(basic, test_volume_raid_create);
 
     suite_add_tcase(s, basic);
     return s;

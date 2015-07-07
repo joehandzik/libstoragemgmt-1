@@ -10,9 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
-# USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 #         Gris Ge <fge@redhat.com>
@@ -120,6 +118,10 @@ class Ontap(IStorageAreaNetwork, INfs):
         'partial': 'all the disks in the volume are not available.',
         'restricted': 'volume is restricted to protocol accesses',
     }
+
+    # strip size: http://www.netapp.com/us/media/tr-3001.pdf
+    _STRIP_SIZE = 4096
+    _OPT_IO_SIZE = 65536
 
     def __init__(self):
         self.f = None
@@ -261,19 +263,29 @@ class Ontap(IStorageAreaNetwork, INfs):
                 if 'is-zeroed' in na_disk and na_disk['is-zeroed'] == 'true':
                     status |= Disk.STATUS_OK | Disk.STATUS_SPARE_DISK
                 else:
+                    # If spare disk is not zerored, it will be automaticlly
+                    # zeroed before assigned to aggregate.
+                    # Hence we consider non-zeroed spare disks as stopped
+                    # spare disks.
                     status |= Disk.STATUS_STOPPED | Disk.STATUS_SPARE_DISK
             elif rs == 'present':
                 status |= Disk.STATUS_OK
             elif rs == 'partner':
                 # Before we have good way to connect two controller,
                 # we have to mark partner disk as OTHER
-                status |= Disk.STATUS_OTHER
+                return Disk.STATUS_OTHER
 
         if 'is-prefailed' in na_disk and na_disk['is-prefailed'] == 'true':
             status |= Disk.STATUS_STOPPING
 
         if 'is-offline' in na_disk and na_disk['is-offline'] == 'true':
             status |= Disk.STATUS_ERROR
+
+        if 'aggregate' not in na_disk:
+            # All free disks are automatically marked as spare disks. They
+            # could easily convert to data or parity disk without any
+            # explicit command.
+            status |= Disk.STATUS_FREE
 
         if status == 0:
             status = Disk.STATUS_UNKNOWN
@@ -310,35 +322,24 @@ class Ontap(IStorageAreaNetwork, INfs):
         return search_property(
             [self._lun(l) for l in luns], search_key, search_value)
 
-#    @staticmethod
-#    def _raid_type_of_na_aggr(na_aggr):
-#        na_raid_statuses = na_aggr['raid-status'].split(',')
-#        if 'raid0' in na_raid_statuses:
-#            return Pool.RAID_TYPE_RAID0
-#        if 'raid4' in na_raid_statuses:
-#            return Pool.RAID_TYPE_RAID4
-#        if 'raid_dp' in na_raid_statuses:
-#            return Pool.RAID_TYPE_RAID6
-#        if 'mixed_raid_type' in na_raid_statuses:
-#            return Pool.RAID_TYPE_MIXED
-#        return Pool.RAID_TYPE_UNKNOWN
-
     # This is based on NetApp ONTAP Manual pages:
     # https://library.netapp.com/ecmdocs/ECMP1196890/html/man1/na_aggr.1.html
     _AGGR_RAID_STATUS_CONV = {
         'normal': Pool.STATUS_OK,
-        'verifying': Pool.STATUS_VERIFYING,
+        'verifying': Pool.STATUS_OK | Pool.STATUS_VERIFYING,
         'copying': Pool.STATUS_INITIALIZING,
-        'ironing': Pool.STATUS_VERIFYING,
-        'resyncing': Pool.STATUS_RECONSTRUCTING,
-        'mirror degraded': Pool.STATUS_DEGRADED,
+        'ironing': Pool.STATUS_OK | Pool.STATUS_VERIFYING,
+        'resyncing': Pool.STATUS_OK | Pool.STATUS_DEGRADED |
+        Pool.STATUS_RECONSTRUCTING,
+        'mirror degraded': Pool.STATUS_OK | Pool.STATUS_DEGRADED,
         'needs check': Pool.STATUS_ERROR,
         'initializing': Pool.STATUS_INITIALIZING,
-        'growing': Pool.STATUS_GROWING,
+        'growing': Pool.STATUS_OK | Pool.STATUS_GROWING,
         'partial': Pool.STATUS_ERROR,
         'noparity': Pool.STATUS_OTHER,
-        'degraded': Pool.STATUS_DEGRADED,
-        'reconstruct': Pool.STATUS_RECONSTRUCTING,
+        'degraded': Pool.STATUS_OK | Pool.STATUS_DEGRADED,
+        'reconstruct': Pool.STATUS_OK | Pool.STATUS_DEGRADED |
+        Pool.STATUS_RECONSTRUCTING,
         'out-of-date': Pool.STATUS_OTHER,
         'foreign': Pool.STATUS_OTHER,
     }
@@ -397,7 +398,7 @@ class Ontap(IStorageAreaNetwork, INfs):
 
         return status, status_info
 
-    def _pool_from_na_aggr(self, na_aggr, na_disks, flags):
+    def _pool_from_na_aggr(self, na_aggr, flags):
         pool_id = na_aggr['name']
         pool_name = na_aggr['name']
         total_space = int(na_aggr['size-total'])
@@ -543,6 +544,8 @@ class Ontap(IStorageAreaNetwork, INfs):
         cap.set(Capabilities.EXPORT_CUSTOM_PATH)
         cap.set(Capabilities.TARGET_PORTS)
         cap.set(Capabilities.DISKS)
+        cap.set(Capabilities.VOLUME_RAID_INFO)
+        cap.set(Capabilities.POOL_MEMBER_INFO)
         return cap
 
     @handle_ontap_errors
@@ -559,11 +562,8 @@ class Ontap(IStorageAreaNetwork, INfs):
     def pools(self, search_key=None, search_value=None, flags=0):
         pools = []
         na_aggrs = self.f.aggregates()
-        na_disks = []
-        # We do extra flags check in order to save self.f.disks() calls
-        # in case we have multiple aggregates.
         for na_aggr in na_aggrs:
-            pools.extend([self._pool_from_na_aggr(na_aggr, na_disks, flags)])
+            pools.extend([self._pool_from_na_aggr(na_aggr, flags)])
         na_vols = self.f.volumes()
         for na_vol in na_vols:
             pools.extend([self._pool_from_na_vol(na_vol, na_aggrs, flags)])
@@ -1290,3 +1290,61 @@ class Ontap(IStorageAreaNetwork, INfs):
                                  self.sys_info.id))
 
         return search_property(tp, search_key, search_value)
+
+    @staticmethod
+    def _raid_type_of_na_aggr(na_aggr):
+        na_raid_statuses = na_aggr['raid-status'].split(',')
+        if 'mixed_raid_type' in na_raid_statuses:
+            return Volume.RAID_TYPE_MIXED
+        elif 'raid0' in na_raid_statuses:
+            return Volume.RAID_TYPE_RAID0
+        elif 'raid4' in na_raid_statuses:
+            return Volume.RAID_TYPE_RAID4
+        elif 'raid_dp' in na_raid_statuses:
+            return Volume.RAID_TYPE_RAID6
+        return Volume.RAID_TYPE_UNKNOWN
+
+    @handle_ontap_errors
+    def volume_raid_info(self, volume, flags=0):
+        na_vol_name = Ontap._get_volume_from_path(volume.pool_id)
+        na_vol = self.f.volumes(volume_name=na_vol_name)
+        if len(na_vol) == 0:
+            # If parent pool not found, then this LSM volume should not exist.
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+        if len(na_vol) != 1:
+            raise LsmError(
+                ErrorNumber.PLUGIN_BUG,
+                "volume_raid_info(): Got 2+ na_vols from self.f.volumes() "
+                "%s" % na_vol)
+
+        na_vol = na_vol[0]
+        na_aggr_name = na_vol['containing-aggregate']
+        na_aggr = self.f.aggregates(aggr_name=na_aggr_name)[0]
+        raid_type = Ontap._raid_type_of_na_aggr(na_aggr)
+        disk_count = int(na_aggr['disk-count'])
+
+        return [
+            raid_type, Ontap._STRIP_SIZE, disk_count, Ontap._STRIP_SIZE,
+            Ontap._OPT_IO_SIZE]
+
+    @handle_ontap_errors
+    def pool_member_info(self, pool, flags=0):
+        if pool.element_type & Pool.ELEMENT_TYPE_VOLUME:
+            # We got a NetApp volume
+            raid_type = Volume.RAID_TYPE_OTHER
+            member_type = Pool.MEMBER_TYPE_POOL
+            na_vol = self.f.volumes(volume_name=pool.name)[0]
+            disk_ids = [na_vol['containing-aggregate']]
+        else:
+            # We got a NetApp aggregate
+            member_type = Pool.MEMBER_TYPE_DISK
+            na_aggr = self.f.aggregates(aggr_name=pool.name)[0]
+            raid_type = Ontap._raid_type_of_na_aggr(na_aggr)
+            disk_ids = list(
+                Ontap._disk_id(d)
+                for d in self.f.disks()
+                if 'aggregate' in d and d['aggregate'] == pool.name)
+
+        return raid_type, member_type, disk_ids

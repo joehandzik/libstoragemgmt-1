@@ -10,9 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
-# USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
 
@@ -201,16 +199,10 @@ REPLICA_MODE_SYNC = Uint16(2)
 REPLICA_MODE_ASYNC = Uint16(3)
 
 # CIM_StorageVolume['NameFormat']
-VOL_NAME_FORMAT_OTHER = 1
 VOL_NAME_FORMAT_NNA = 9
-VOL_NAME_FORMAT_EUI64 = 10
-VOL_NAME_FORMAT_T10VID = 11
 
 # CIM_StorageVolume['NameNamespace']
-VOL_NAME_SPACE_OTHER = 1
 VOL_NAME_SPACE_VPD83_TYPE3 = 2
-VOL_NAME_SPACE_VPD83_TYPE2 = 3
-VOL_NAME_SPACE_VPD83_TYPE1 = 4
 
 # CIM_ReplicationServiceCapabilities['SupportedAsynchronousActions']
 # or CIM_ReplicationServiceCapabilities['SupportedSynchronousActions']

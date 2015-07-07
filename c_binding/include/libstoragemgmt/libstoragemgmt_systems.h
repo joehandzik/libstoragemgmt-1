@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -47,7 +46,7 @@ int LSM_DLL_EXPORT lsm_system_record_free(lsm_system *s);
  * @param size  Number of elements.
  * @return LSM_ERR_OK on success, else error reason.
  *  */
-int LSM_DLL_EXPORT lsm_system_record_array_free(lsm_system *s[], uint32_t size );
+int LSM_DLL_EXPORT lsm_system_record_array_free(lsm_system *s[], uint32_t size);
 
 /**
  * Retrieve the Id for the system.
@@ -79,5 +78,4 @@ uint32_t LSM_DLL_EXPORT lsm_system_status_get(lsm_system *s);
 #ifdef  __cplusplus
 }
 #endif
-
 #endif

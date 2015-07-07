@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 #         Gris Ge <fge@redhat.com>
@@ -199,6 +198,14 @@ class Disk(IData):
     # Indicate disk is a spare disk.
     STATUS_RECONSTRUCT = 1 << 12
     # Indicate disk is reconstructing data.
+    STATUS_FREE = 1 << 13
+    # New in version 1.2, indicate the whole disk is not holding any data or
+    # acting as a dedicate spare disk.
+    # This disk could be assigned as a dedicated spare disk or used for
+    # creating pool.
+    # If any spare disk(like those on NetApp ONTAP) does not require
+    # any explicit action when assigning to pool, it should be treated as
+    # free disk and marked as STATUS_FREE|STATUS_SPARE_DISK.
 
     def __init__(self, _id, _name, _disk_type, _block_size, _num_of_blocks,
                  _status, _system_id, _plugin_data=None):
@@ -224,7 +231,7 @@ class Disk(IData):
 
 # Lets do this once outside of the class to minimize the number of
 # times it needs to be compiled.
-_vol_regex_vpd83 = re.compile('^[0-9a-f]{32}$')
+_vol_regex_vpd83 = re.compile('(?:^6[0-9a-f]{31})|(?:^[235][0-9a-f]{15})$')
 
 
 @default_property('id', doc="Unique identifier")
@@ -258,14 +265,56 @@ class Volume(IData):
     ADMIN_STATE_DISABLED = 0
     ADMIN_STATE_ENABLED = 1
 
+    RAID_TYPE_UNKNOWN = -1
+    # The plugin failed to detect the volume's RAID type.
+    RAID_TYPE_RAID0 = 0
+    # Stripe
+    RAID_TYPE_RAID1 = 1
+    # Mirror for two disks. For 4 disks or more, they are RAID10.
+    RAID_TYPE_RAID3 = 3
+    # Byte-level striping with dedicated parity
+    RAID_TYPE_RAID4 = 4
+    # Block-level striping with dedicated parity
+    RAID_TYPE_RAID5 = 5
+    # Block-level striping with distributed parity
+    RAID_TYPE_RAID6 = 6
+    # Block-level striping with two distributed parities, aka, RAID-DP
+    RAID_TYPE_RAID10 = 10
+    # Stripe of mirrors
+    RAID_TYPE_RAID15 = 15
+    # Parity of mirrors
+    RAID_TYPE_RAID16 = 16
+    # Dual parity of mirrors
+    RAID_TYPE_RAID50 = 50
+    # Stripe of parities
+    RAID_TYPE_RAID60 = 60
+    # Stripe of dual parities
+    RAID_TYPE_RAID51 = 51
+    # Mirror of parities
+    RAID_TYPE_RAID61 = 61
+    # Mirror of dual parities
+    RAID_TYPE_JBOD = 20
+    # Just bunch of disks, no parity, no striping.
+    RAID_TYPE_MIXED = 21
+    # This volume contains multiple RAID settings.
+    RAID_TYPE_OTHER = 22
+    # Vendor specific RAID type
+
+    STRIP_SIZE_UNKNOWN = 0
+    DISK_COUNT_UNKNOWN = 0
+    MIN_IO_SIZE_UNKNOWN = 0
+    OPT_IO_SIZE_UNKNOWN = 0
+
+    VCR_STRIP_SIZE_DEFAULT = 0
+
     def __init__(self, _id, _name, _vpd83, _block_size, _num_of_blocks,
                  _admin_state, _system_id, _pool_id, _plugin_data=None):
         self._id = _id                        # Identifier
         self._name = _name                    # Human recognisable name
         if _vpd83 and not Volume.vpd83_verify(_vpd83):
             raise LsmError(ErrorNumber.INVALID_ARGUMENT,
-                           "Incorrect format of VPD 0x83 string: '%s', "
-                           "expecting 32 lower case hex characters" %
+                           "Incorrect format of VPD 0x83 NAA(3) string: '%s', "
+                           "expecting 32 or 16 lower case hex characters" %
                            _vpd83)
         self._vpd83 = _vpd83                  # SCSI page 83 unique ID
         self._block_size = _block_size        # Block size
@@ -363,6 +412,11 @@ class Pool(IData):
     STATUS_VERIFYING = 1 << 13
     STATUS_INITIALIZING = 1 << 14
     STATUS_GROWING = 1 << 15
+
+    MEMBER_TYPE_UNKNOWN = 0
+    MEMBER_TYPE_OTHER = 1
+    MEMBER_TYPE_DISK = 2
+    MEMBER_TYPE_POOL = 3
 
     def __init__(self, _id, _name, _element_type, _unsupported_actions,
                  _total_space, _free_space,
@@ -521,8 +575,8 @@ class AccessGroup(IData):
         if AccessGroup._regex_wwpn.match(str(init_id)):
             if init_type is None or \
                     init_type == AccessGroup.INIT_TYPE_WWPN:
-                return True, AccessGroup.INIT_TYPE_WWPN, \
-                   AccessGroup._wwpn_to_lsm_type(init_id)
+                return (True, AccessGroup.INIT_TYPE_WWPN,
+                        AccessGroup._wwpn_to_lsm_type(init_id))
 
         if raise_exception:
             raise LsmError(ErrorNumber.INVALID_ARGUMENT,
@@ -669,6 +723,8 @@ class Capabilities(IData):
 
     VOLUME_ISCSI_CHAP_AUTHENTICATION = 53
 
+    VOLUME_RAID_INFO = 54
+
     VOLUME_THIN = 55
 
     #File system
@@ -704,6 +760,8 @@ class Capabilities(IData):
     TARGET_PORTS_QUICK_SEARCH = 217
 
     DISKS = 220
+    POOL_MEMBER_INFO = 221
+    VOLUME_RAID_CREATE = 222
 
     def _to_dict(self):
         return {'class': self.__class__.__name__,

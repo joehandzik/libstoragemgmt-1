@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -21,8 +20,8 @@
 #define LSM_VERSION_H_
 
 #define LSM_MAJOR	1
-#define LSM_MINOR	1
-#define LSM_MICRO	0
+#define LSM_MINOR	2
+#define LSM_MICRO	3
 
 #define LSM_VERSION ((LSM_MAJOR * 10000) + (LSM_MINOR * 100) + LSM_MICRO)
 

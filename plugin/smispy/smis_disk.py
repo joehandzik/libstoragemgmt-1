@@ -10,14 +10,15 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
 
 from lsm import Disk, md5, LsmError, ErrorNumber
 import dmtf
 from utils import merge_list
+from pywbem import CIM_ERR_NOT_FOUND, CIM_ERR_INVALID_PARAMETER
+from lsm.plugin.smispy.smis_common import SmisCommon
 
 
 _LSM_DISK_OP_STATUS_CONV = {
@@ -77,10 +78,11 @@ def cim_disk_pros():
     """
     Return all CIM_DiskDrive Properties needed to create a Disk object.
     The 'Type' and 'MediaType' is only for MegaRAID.
+    The 'EMCInUse' is only for EMC.
     """
     return ['OperationalStatus', 'Name', 'SystemName',
             'Caption', 'InterconnectType', 'DiskType', 'DeviceID',
-            'Type', 'MediaType']
+            'Type', 'MediaType', 'EMCInUse']
 
 
 def sys_id_of_cim_disk(cim_disk):
@@ -178,6 +180,18 @@ def cim_disk_to_lsm_disk(smis_common, cim_disk):
         property_list=['BlockSize', 'NumberOfBlocks'])
 
     status = _disk_status_of_cim_disk(cim_disk)
+    if smis_common.profile_check(SmisCommon.SNIA_SPARE_DISK_PROFILE,
+                                 SmisCommon.SMIS_SPEC_VER_1_4,
+                                 raise_error=False):
+        cim_srss = smis_common.AssociatorNames(
+            cim_ext.path, AssocClass='CIM_IsSpare',
+            ResultClass='CIM_StorageRedundancySet')
+        if len(cim_srss) >= 1:
+            status |= Disk.STATUS_SPARE_DISK
+
+    if 'EMCInUse' in cim_disk.keys() and cim_disk['EMCInUse'] is False:
+        status |= Disk.STATUS_FREE
+
     name = ''
     block_size = Disk.BLOCK_SIZE_NOT_FOUND
     num_of_block = Disk.BLOCK_COUNT_NOT_FOUND

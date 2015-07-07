@@ -11,19 +11,18 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  *
  */
 
 #ifndef LIBSTORAGEMGMT_DISK_H
-#define	LIBSTORAGEMGMT_DISK_H
+#define LIBSTORAGEMGMT_DISK_H
 
 #include "libstoragemgmt_common.h"
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -47,7 +46,8 @@ lsm_disk LSM_DLL_EXPORT *lsm_disk_record_copy(lsm_disk *d);
  * @param size      Size of disk array
  * @return LSM_ERR_OK on success, else error reason.
  */
-int LSM_DLL_EXPORT lsm_disk_record_array_free( lsm_disk *disk[], uint32_t size);
+int LSM_DLL_EXPORT lsm_disk_record_array_free(lsm_disk *disk[],
+                                              uint32_t size);
 
 /**
  * Returns the disk id
@@ -112,8 +112,7 @@ uint64_t LSM_DLL_EXPORT lsm_disk_status_get(lsm_disk *d);
  */
 const char LSM_DLL_EXPORT *lsm_disk_system_id_get(lsm_disk *d);
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
-
-#endif	/* LIBSTORAGEMGMT_DISK_H */
+#endif                          /* LIBSTORAGEMGMT_DISK_H */

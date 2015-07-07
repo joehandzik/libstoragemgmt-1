@@ -12,8 +12,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 #
@@ -69,6 +68,11 @@ good() {
 
 # Add a signal handler to clean-up
 trap "cleanup; exit 1" INT
+
+# Unset these as they can cause the test case to fail
+# specifically the password one, but remove both.
+unset LSMCLI_PASSWORD
+unset LSMCLI_URI
 
 #Put us in a consistent spot
 cd "$(dirname "$0")"
@@ -144,6 +148,9 @@ $LSMD_DAEMON \
     --plugindir $plugins \
     --socketdir $LSM_UDS_PATH \
     -d >$LSMD_TMP_LOG_FILE &
+
+# Let the daemon get settled before running the tests
+sleep 2
 
 LSMD_PID=$(ps aux | grep $LSM_UDS_PATH | grep -v grep |  awk '{print $2}')
 

@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
 
@@ -158,8 +157,7 @@ def _vpd83_netapp(cim_vol):
 
 def _vpd83_of_cim_vol(cim_vol):
     """
-    Extract VPD83 string from CIMInstanceName and convert to LSM format:
-        ^6[a-f0-9]{31}$
+    Extract VPD83 NAA string from CIMInstanceName and convert to LSM format.
     """
     vpd_83 = _vpd83_in_cim_vol_name(cim_vol)
     if vpd_83 is None:
@@ -167,8 +165,11 @@ def _vpd83_of_cim_vol(cim_vol):
     if vpd_83 is None:
         vpd_83 = _vpd83_netapp(cim_vol)
 
-    if vpd_83 and re.match('^6[a-fA-F0-9]{31}$', vpd_83):
-        return vpd_83.lower()
+    if vpd_83:
+        vpd_83 = vpd_83.lower()
+
+    if vpd_83 and Volume.vpd83_verify(vpd_83):
+        return vpd_83
     else:
         return ''
 
@@ -229,7 +230,7 @@ def volume_name_exists(smis_common, volume_name):
     return False
 
 
-def volume_create_error_handler(smis_common, method_data):
+def volume_create_error_handler(smis_common, method_data, exec_info=None):
     """
     When we got CIMError, we check whether we got a duplicate volume name.
     The method_data is the requested volume name.
@@ -238,5 +239,8 @@ def volume_create_error_handler(smis_common, method_data):
         raise LsmError(ErrorNumber.NAME_CONFLICT,
                        "Volume with name '%s' already exists!" % method_data)
 
-    (error_type, error_msg, error_trace) = sys.exc_info()
+    if exec_info is None:
+        (error_type, error_msg, error_trace) = sys.exc_info()
+    else:
+        (error_type, error_msg, error_trace) = exec_info
     raise error_type, error_msg, error_trace

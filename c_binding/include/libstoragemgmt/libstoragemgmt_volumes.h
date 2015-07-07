@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -46,7 +45,8 @@ lsm_volume LSM_DLL_EXPORT *lsm_volume_record_copy(lsm_volume *vol);
  * @param size  Size of array.
  * @return LSM_ERR_OK on success, else error reason.
  */
-int LSM_DLL_EXPORT lsm_volume_record_array_free( lsm_volume *init[], uint32_t size);
+int LSM_DLL_EXPORT lsm_volume_record_array_free(lsm_volume *init[],
+                                                uint32_t size);
 
 /**
  * Retrieves the volume id.
@@ -100,17 +100,16 @@ uint32_t LSM_DLL_EXPORT lsm_volume_admin_state_get(lsm_volume *v);
  * @param v     Volume ptr.
  * @return System id.
  */
-char LSM_DLL_EXPORT *lsm_volume_system_id_get( lsm_volume *v);
+char LSM_DLL_EXPORT *lsm_volume_system_id_get(lsm_volume *v);
 
 /**
  * Retrieves the pool id that the volume is derived from.
  * @param v     Volume ptr.
  * @return Pool id.
  */
-char LSM_DLL_EXPORT *lsm_volume_pool_id_get( lsm_volume *v);
+char LSM_DLL_EXPORT *lsm_volume_pool_id_get(lsm_volume *v);
 
 #ifdef  __cplusplus
 }
 #endif
-
-#endif  /* LIBSTORAGEMGMT_VOLUMES_H */
+#endif                          /* LIBSTORAGEMGMT_VOLUMES_H */

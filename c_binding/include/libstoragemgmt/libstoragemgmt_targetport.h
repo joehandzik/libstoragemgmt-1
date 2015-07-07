@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -48,8 +47,8 @@ int LSM_DLL_EXPORT lsm_target_port_record_free(lsm_target_port *tp);
  * @param size      Number of elements.
  * @return LSM_ERR_OK on success, else error reason.
  *  */
-int LSM_DLL_EXPORT lsm_target_port_record_array_free(lsm_target_port *tp[],
-                                                        uint32_t size );
+int LSM_DLL_EXPORT lsm_target_port_record_array_free(lsm_target_port *
+                                                     tp[], uint32_t size);
 
 /**
  * Returns the ID of the target port
@@ -63,45 +62,50 @@ const char LSM_DLL_EXPORT *lsm_target_port_id_get(lsm_target_port *tp);
  * @param tp        lsm_target_port record
  * @return enumerated value
  */
-lsm_target_port_type LSM_DLL_EXPORT lsm_target_port_type_get(lsm_target_port *tp);
+lsm_target_port_type LSM_DLL_EXPORT
+    lsm_target_port_type_get(lsm_target_port *tp);
 
 /**
  * Returns the service address
  * @param tp    lsm_target_port record
  * @return Service address, NULL on error
  */
-const char LSM_DLL_EXPORT *lsm_target_port_service_address_get(lsm_target_port *tp);
+const char LSM_DLL_EXPORT *
+    lsm_target_port_service_address_get(lsm_target_port *tp);
 
 /**
  * Returns the network address
  * @param tp    lsm_target_port record
  * @return Network address, NULL on error
  */
-const char LSM_DLL_EXPORT *lsm_target_port_network_address_get(lsm_target_port *tp);
+const char LSM_DLL_EXPORT *
+    lsm_target_port_network_address_get(lsm_target_port *tp);
 
 /**
  * Returns the physical address
  * @param tp    lsm_target_port record
  * @return Physical address, NULL on error
  */
-const char LSM_DLL_EXPORT *lsm_target_port_physical_address_get(lsm_target_port *tp);
+const char LSM_DLL_EXPORT *
+    lsm_target_port_physical_address_get(lsm_target_port *tp);
 
 /**
  * Returns the physical name
  * @param tp    lsm_target_port record
  * @return Physical name, NULL on error
  */
-const char LSM_DLL_EXPORT *lsm_target_port_physical_name_get(lsm_target_port *tp);
+const char LSM_DLL_EXPORT *
+    lsm_target_port_physical_name_get(lsm_target_port *tp);
 
 /**
  * Returns the system_id
  * @param tp    lsm_target_port record
  * @return System id, NULL on error
  */
-const char LSM_DLL_EXPORT *lsm_target_port_system_id_get(lsm_target_port *tp);
+const char LSM_DLL_EXPORT *
+    lsm_target_port_system_id_get(lsm_target_port *tp);
 
 #ifdef  __cplusplus
 }
 #endif
-
 #endif

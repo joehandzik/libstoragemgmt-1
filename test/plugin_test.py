@@ -12,8 +12,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 
 import lsm
 import functools
@@ -26,7 +25,6 @@ import argparse
 import collections
 import atexit
 import sys
-import yaml
 import re
 import os
 import tempfile
@@ -263,6 +261,10 @@ class TestPlugin(unittest.TestCase):
         return mb_in_bytes(MIN_OBJECT_SIZE)
 
     def setUp(self):
+        for skip_test_case in TestPlugin.SKIP_TEST_CASES:
+            if self.id().endswith(skip_test_case):
+                self.skipTest("Tested has been skiped as requested")
+
         self.c = TestProxy(lsm.Client(TestPlugin.URI, TestPlugin.PASSWORD))
 
         self.systems = self.c.systems()
@@ -318,34 +320,41 @@ class TestPlugin(unittest.TestCase):
         pools_list = self.c.pools()
         self.assertTrue(len(pools_list) > 0, "We need at least 1 pool to test")
 
-    @staticmethod
-    def _vpd_correct(vpd):
-        if vpd and re.match('^[a-f0-9]{32}$', vpd):
-            return True
-        return False
-
-    def test_volume_list(self):
-        vol = None
+    def _find_or_create_volumes(self):
+        """
+        Find existing volumes, if not found, try to create one.
+        Return (volumes, flag_created)
+        If 'flag_created' is True, then returned volumes is newly created.
+        """
         volumes = self.c.volumes()
-        if len(volumes) == 0:
+        flag_created = False
+        if len(self.c.volumes()) == 0:
             for s in self.systems:
                 cap = self.c.capabilities(s)
-
                 if supported(cap, [Cap.VOLUME_CREATE, Cap.VOLUME_DELETE]):
-                    vol, pool = self._volume_create(s.id)
+                    self._volume_create(s.id)
+                    flag_created = True
                     break
+            volumes = self.c.volumes()
 
-        volumes = self.c.volumes()
+        return volumes, flag_created
 
-        for v in volumes:
-            self.assertTrue(TestPlugin._vpd_correct(v.vpd83),
-                            "VPD is not as expected '%s' for volume id: '%s'" %
-                            (v.vpd83, v.id))
-
+    def test_volume_list(self):
+        (volumes, flag_created) = self._find_or_create_volumes()
         self.assertTrue(len(volumes) > 0, "We need at least 1 volume to test")
 
-        if vol is not None:
-            self._volume_delete(vol)
+        if flag_created:
+            self._volume_delete(volumes[0])
+
+    def test_volume_vpd83(self):
+        (volumes, flag_created) = self._find_or_create_volumes()
+        self.assertTrue(len(volumes) > 0, "We need at least 1 volume to test")
+        for v in volumes:
+            self.assertTrue(lsm.Volume.vpd83_verify(v.vpd83),
+                            "VPD is not as expected '%s' for volume id: '%s'" %
+                            (v.vpd83, v.id))
+        if flag_created:
+            self._volume_delete(volumes[0])
 
     def test_disks_list(self):
         for s in self.systems:
@@ -378,7 +387,7 @@ class TestPlugin(unittest.TestCase):
         if system_id in self.pool_by_sys_id:
             fs = None
             pool = self._get_pool_by_usage(system_id,
-                                            lsm.Pool.ELEMENT_TYPE_FS)
+                                           lsm.Pool.ELEMENT_TYPE_FS)
 
             self.assertTrue(pool is not None, "Unable to find a suitable pool "
                                               "for fs creation")
@@ -697,7 +706,7 @@ class TestPlugin(unittest.TestCase):
                                Cap.VOLUME_CREATE,
                                Cap.VOLUME_DELETE]):
 
-                if supported(cap, [Cap.ACCESS_GROUP_CREATE_WWPN]):
+                if supported(cap, [Cap.ACCESS_GROUP_CREATE_ISCSI_IQN]):
                     ag_name = rs("ag")
                     ag_iqn = 'iqn.1994-05.com.domain:01.' + rs(None, 6)
 
@@ -832,8 +841,7 @@ class TestPlugin(unittest.TestCase):
                 self._test_ag_create_dup(ag, s)
                 self._delete_access_group(ag)
 
-        if supported(cap, [Cap.ACCESS_GROUPS,
-                            Cap.ACCESS_GROUP_CREATE_WWPN]):
+        if supported(cap, [Cap.ACCESS_GROUPS, Cap.ACCESS_GROUP_CREATE_WWPN]):
             ag = self._create_access_group(
                 cap, rs('ag'), s, lsm.AccessGroup.INIT_TYPE_WWPN)
             if ag is not None and \
@@ -1106,13 +1114,21 @@ class TestPlugin(unittest.TestCase):
                    "012345678901234567890123456789ax",
                    "012345678901234567890123456789ag",
                    "1234567890123456789012345abcdef",
-                   "01234567890123456789012345abcdefa"]
+                   "01234567890123456789012345abcdefa",
+                   "55cd2e404beec32e0", "55cd2e404beec32ex",
+                   "35cd2e404beec32A"]
 
         for f in failing:
             self.assertFalse(lsm.Volume.vpd83_verify(f))
 
         self.assertTrue(
-            lsm.Volume.vpd83_verify("01234567890123456789012345abcdef"))
+            lsm.Volume.vpd83_verify("61234567890123456789012345abcdef"))
+        self.assertTrue(
+            lsm.Volume.vpd83_verify("55cd2e404beec32e"))
+        self.assertTrue(
+            lsm.Volume.vpd83_verify("35cd2e404beec32e"))
+        self.assertTrue(
+            lsm.Volume.vpd83_verify("25cd2e404beec32e"))
 
     def test_available_plugins(self):
         plugins = self.c.available_plugins(':')
@@ -1267,16 +1283,82 @@ class TestPlugin(unittest.TestCase):
                 self.c.export_remove(exp)
                 self._fs_delete(fs)
 
+    def test_pool_member_info(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.POOL_MEMBER_INFO]):
+                for pool in self.c.pools():
+                    (raid_type, member_type, member_ids) = \
+                        self.c.pool_member_info(pool)
+                    self.assertTrue(type(raid_type) is int)
+                    self.assertTrue(type(member_type) is int)
+                    self.assertTrue(type(member_ids) is list)
+
+    def _skip_current_test(self, messsage):
+        """
+        If skipTest is supported, skip this test with provided message.
+        Sliently return if not supported.
+        """
+        if hasattr(unittest.TestCase, 'skipTest') is True:
+            self.skipTest(messsage)
+        return
+
+    def test_volume_raid_create(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            # TODO(Gris Ge): Add test code for other RAID type and strip size
+            if supported(cap, [Cap.VOLUME_RAID_CREATE]):
+                supported_raid_types, supported_strip_sizes = \
+                    self.c.volume_raid_create_cap_get(s)
+                if lsm.Volume.RAID_TYPE_RAID1 not in supported_raid_types:
+                    self._skip_current_test(
+                        "Skip test: current system does not support "
+                        "creating RAID1 volume")
+
+                # Find two free disks
+                free_disks = []
+                for disk in self.c.disks():
+                    if len(free_disks) == 2:
+                        break
+                    if disk.status & lsm.Disk.STATUS_FREE:
+                        free_disks.append(disk)
+
+                if len(free_disks) != 2:
+                    self._skip_current_test(
+                        "Skip test: Failed to find two free disks for RAID 1")
+                    return
+
+                new_vol = self.c.volume_raid_create(
+                    rs('v'), lsm.Volume.RAID_TYPE_RAID1, free_disks,
+                    lsm.Volume.VCR_STRIP_SIZE_DEFAULT)
+
+                self.assertTrue(new_vol is not None)
+
+                # TODO(Gris Ge): Use volume_raid_info() and pool_member_info()
+                # to verify size, raid_type, member type, member ids.
+
+                if supported(cap, [Cap.VOLUME_DELETE]):
+                    self._volume_delete(new_vol)
+
+            else:
+                self._skip_current_test(
+                    "Skip test: not support of VOLUME_RAID_CREATE")
+
 
 def dump_results():
     """
     unittest.main exits when done so we need to register this handler to
     get our results out.
 
-    output details (yaml) results of what we called, how it finished and how
-    long it took.
+    If PyYAML is available we will output detailed results, else we will
+    output nothing.  The detailed output results of what we called,
+    how it finished and how long it took.
     """
-    sys.stdout.write(yaml.dump(dict(methods_called=results, stats=stats)))
+    try:
+        import yaml
+        sys.stdout.write(yaml.dump(dict(methods_called=results, stats=stats)))
+    except ImportError:
+        sys.stdout.write("NOTICE: Install PyYAML for detailed test results\n")
 
 
 def add_our_params():
@@ -1290,6 +1372,7 @@ def add_our_params():
 Options libStorageMgmt:
  --password  'Array password'
  --uri       'Array URI'
+ --skip      'Test case to skip. Repeatable argument'
  """
 
 
@@ -1300,6 +1383,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--password', default=None)
     parser.add_argument('--uri')
+    parser.add_argument('--skip', action='append')
     options, other_args = parser.parse_known_args()
 
     if options.uri:
@@ -1313,5 +1397,13 @@ if __name__ == "__main__":
         TestPlugin.PASSWORD = options.password
     elif os.getenv('LSM_TEST_PASSWORD'):
         TestPlugin.PASSWORD = os.getenv('LSM_TEST_PASSWORD')
+
+    if options.skip:
+        if hasattr(unittest.TestCase, 'skipTest') is False:
+            raise Exception(
+                "Current python version is too old to support 'skipTest'")
+        TestPlugin.SKIP_TEST_CASES = options.skip
+    else:
+        TestPlugin.SKIP_TEST_CASES = []
 
     unittest.main(argv=sys.argv[:1] + other_args)

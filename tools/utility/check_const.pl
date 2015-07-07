@@ -11,9 +11,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301
-# USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
 #
@@ -101,7 +99,7 @@ my $REGEX_C_CONST_FORMAT = qr/
             (?&NUM_BIT_SHIFT) | (?&NUM_HEX) | (?&NUM_INT)
         )
         (?<CNAME_PAT>
-            [A-Z][A-Z_]+
+            [A-Z][A-Z_0-9]+
         )
         (?<HEADER1>
             [\ \t]*
@@ -179,7 +177,7 @@ sub py_name_2_c_name($) {
     #   2. Convert System to SYSTEM
     #   3. Convert Capabilities to CAP and etc using %PY_CLASS_NAME_CONV;
     my $py_name = shift;
-    if ( $py_name =~ /^lsm\.([a-zA-Z]+)\.([A-Z_]+)$/ ) {
+    if ( $py_name =~ /^lsm\.([a-zA-Z]+)\.([A-Z_][A-Z_0-9]+)$/ ) {
         my $py_class_name = $1;
         my $py_var_name   = $2;
 
@@ -308,7 +306,7 @@ sub _get_py_class_consts($$){
         }
         if ($line =~ /^$current_idention
                 [\ ]+
-                ([A-Z][A-Z\_]+)
+                ([A-Z][A-Z\_0-9]+)
                 [\ ]*=[\ ]*
                 ($REGEX_VALUE_FORMAT)/x){
             my $var_name = $1;

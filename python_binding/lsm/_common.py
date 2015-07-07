@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 import hashlib
@@ -379,7 +378,7 @@ class LsmError(Exception):
 
     def __str__(self):
         error_no_str = ErrorNumber.error_number_to_str(self.code)
-        if self.data is not None:
+        if self.data is not None and self.data:
             return "%s: %s Data: %s" % \
                    (error_no_str, self.msg, self.data)
         else:
@@ -447,6 +446,7 @@ class ErrorNumber(object):
     NOT_FOUND_VOLUME = 205
     NOT_FOUND_NFS_EXPORT = 206
     NOT_FOUND_SYSTEM = 208
+    NOT_FOUND_DISK = 209
 
     NOT_LICENSED = 226
 
@@ -477,6 +477,8 @@ class ErrorNumber(object):
                                 # has no member/initiator.
 
     POOL_NOT_READY = 512        # Pool is not ready for create/resize/etc
+
+    DISK_NOT_FREE = 513     # Disk is not in DISK.STATUS_FREE status.
 
     _LOCALS = locals()
 
@@ -533,6 +535,7 @@ def return_requires(*types):
     is quite important.
     """
     def outer(func):
+        @functools.wraps(func)
         def inner(*args, **kwargs):
             r = func(*args, **kwargs)
 

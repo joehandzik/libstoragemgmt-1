@@ -10,9 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
-# USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
 import sys
@@ -174,6 +172,7 @@ _DISK_TYPE_CONV = {
     Disk.TYPE_SAS: 'SAS',
     Disk.TYPE_FC: 'FC',
     Disk.TYPE_SOP: 'SCSI Over PCI-E(SSD)',
+    Disk.TYPE_SCSI: 'SCSI',
     Disk.TYPE_NL_SAS: 'NL_SAS',
     Disk.TYPE_HDD: 'HDD',
     Disk.TYPE_SSD: 'SSD',
@@ -200,6 +199,7 @@ _DISK_STATUS_CONV = {
     Disk.STATUS_MAINTENANCE_MODE: 'Maintenance',
     Disk.STATUS_SPARE_DISK: 'Spare',
     Disk.STATUS_RECONSTRUCT: 'Reconstruct',
+    Disk.STATUS_FREE: 'Free',
 }
 
 
@@ -240,6 +240,75 @@ class PlugData(object):
     def __init__(self, description, plugin_version):
             self.desc = description
             self.version = plugin_version
+
+
+class VolumeRAIDInfo(object):
+    _RAID_TYPE_MAP = {
+        Volume.RAID_TYPE_RAID0: 'RAID0',
+        Volume.RAID_TYPE_RAID1: 'RAID1',
+        Volume.RAID_TYPE_RAID3: 'RAID3',
+        Volume.RAID_TYPE_RAID4: 'RAID4',
+        Volume.RAID_TYPE_RAID5: 'RAID5',
+        Volume.RAID_TYPE_RAID6: 'RAID6',
+        Volume.RAID_TYPE_RAID10: 'RAID10',
+        Volume.RAID_TYPE_RAID15: 'RAID15',
+        Volume.RAID_TYPE_RAID16: 'RAID16',
+        Volume.RAID_TYPE_RAID50: 'RAID50',
+        Volume.RAID_TYPE_RAID60: 'RAID60',
+        Volume.RAID_TYPE_RAID51: 'RAID51',
+        Volume.RAID_TYPE_RAID61: 'RAID61',
+        Volume.RAID_TYPE_JBOD: 'JBOD',
+        Volume.RAID_TYPE_MIXED: 'MIXED',
+        Volume.RAID_TYPE_OTHER: 'OTHER',
+        Volume.RAID_TYPE_UNKNOWN: 'UNKNOWN',
+    }
+
+    VOL_CREATE_RAID_TYPES_STR = [
+        'RAID0', 'RAID1', 'RAID5', 'RAID6', 'RAID10', 'RAID50', 'RAID60']
+
+    def __init__(self, vol_id, raid_type, strip_size, disk_count,
+                 min_io_size, opt_io_size):
+        self.vol_id = vol_id
+        self.raid_type = raid_type
+        self.strip_size = strip_size
+        self.disk_count = disk_count
+        self.min_io_size = min_io_size
+        self.opt_io_size = opt_io_size
+
+    @staticmethod
+    def raid_type_to_str(raid_type):
+        return _enum_type_to_str(raid_type, VolumeRAIDInfo._RAID_TYPE_MAP)
+
+    @staticmethod
+    def raid_type_str_to_lsm(raid_type_str):
+        return _str_to_enum(raid_type_str, VolumeRAIDInfo._RAID_TYPE_MAP)
+
+
+class PoolRAIDInfo(object):
+    _MEMBER_TYPE_MAP = {
+        Pool.MEMBER_TYPE_UNKNOWN: 'Unknown',
+        Pool.MEMBER_TYPE_OTHER: 'Unknown',
+        Pool.MEMBER_TYPE_POOL: 'Pool',
+        Pool.MEMBER_TYPE_DISK: 'Disk',
+    }
+
+    def __init__(self, pool_id, raid_type, member_type, member_ids):
+        self.pool_id = pool_id
+        self.raid_type = raid_type
+        self.member_type = member_type
+        self.member_ids = member_ids
+
+    @staticmethod
+    def member_type_to_str(member_type):
+        return _enum_type_to_str(
+            member_type, PoolRAIDInfo._MEMBER_TYPE_MAP)
+
+
+class VcrCap(object):
+    def __init__(self, system_id, raid_types, strip_sizes):
+        self.system_id = system_id
+        self.raid_types = raid_types
+        self.strip_sizes = strip_sizes
 
 
 class DisplayData(object):
@@ -497,6 +566,69 @@ class DisplayData(object):
         'value_conv_human': TGT_PORT_VALUE_CONV_HUMAN,
     }
 
+    VOL_RAID_INFO_HEADER = OrderedDict()
+    VOL_RAID_INFO_HEADER['vol_id'] = 'Volume ID'
+    VOL_RAID_INFO_HEADER['raid_type'] = 'RAID Type'
+    VOL_RAID_INFO_HEADER['strip_size'] = 'Strip Size'
+    VOL_RAID_INFO_HEADER['disk_count'] = 'Disk Count'
+    VOL_RAID_INFO_HEADER['min_io_size'] = 'Minimum I/O Size'
+    VOL_RAID_INFO_HEADER['opt_io_size'] = 'Optimal I/O Size'
+
+    VOL_RAID_INFO_COLUMN_SKIP_KEYS = []
+
+    VOL_RAID_INFO_VALUE_CONV_ENUM = {
+        'raid_type': VolumeRAIDInfo.raid_type_to_str,
+        }
+    VOL_RAID_INFO_VALUE_CONV_HUMAN = [
+        'strip_size', 'min_io_size', 'opt_io_size']
+
+    VALUE_CONVERT[VolumeRAIDInfo] = {
+        'headers': VOL_RAID_INFO_HEADER,
+        'column_skip_keys': VOL_RAID_INFO_COLUMN_SKIP_KEYS,
+        'value_conv_enum': VOL_RAID_INFO_VALUE_CONV_ENUM,
+        'value_conv_human': VOL_RAID_INFO_VALUE_CONV_HUMAN,
+    }
+
+    POOL_RAID_INFO_HEADER = OrderedDict()
+    POOL_RAID_INFO_HEADER['pool_id'] = 'Pool ID'
+    POOL_RAID_INFO_HEADER['raid_type'] = 'RAID Type'
+    POOL_RAID_INFO_HEADER['member_type'] = 'Member Type'
+    POOL_RAID_INFO_HEADER['member_ids'] = 'Member IDs'
+
+    POOL_RAID_INFO_COLUMN_SKIP_KEYS = []
+
+    POOL_RAID_INFO_VALUE_CONV_ENUM = {
+        'raid_type': VolumeRAIDInfo.raid_type_to_str,
+        'member_type': PoolRAIDInfo.member_type_to_str,
+        }
+    POOL_RAID_INFO_VALUE_CONV_HUMAN = []
+
+    VALUE_CONVERT[PoolRAIDInfo] = {
+        'headers': POOL_RAID_INFO_HEADER,
+        'column_skip_keys': POOL_RAID_INFO_COLUMN_SKIP_KEYS,
+        'value_conv_enum': POOL_RAID_INFO_VALUE_CONV_ENUM,
+        'value_conv_human': POOL_RAID_INFO_VALUE_CONV_HUMAN,
+    }
+
+    VCR_CAP_HEADER = OrderedDict()
+    VCR_CAP_HEADER['system_id'] = 'System ID'
+    VCR_CAP_HEADER['raid_types'] = 'Supported RAID Types'
+    VCR_CAP_HEADER['strip_sizes'] = 'Supported Strip Sizes'
+
+    VCR_CAP_COLUMN_SKIP_KEYS = []
+
+    VCR_CAP_VALUE_CONV_ENUM = {
+        'raid_types': lambda i: [VolumeRAIDInfo.raid_type_to_str(x) for x in i]
+    }
+    VCR_CAP_VALUE_CONV_HUMAN = ['strip_sizes']
+
+    VALUE_CONVERT[VcrCap] = {
+        'headers': VCR_CAP_HEADER,
+        'column_skip_keys': VCR_CAP_COLUMN_SKIP_KEYS,
+        'value_conv_enum': VCR_CAP_VALUE_CONV_ENUM,
+        'value_conv_human': VCR_CAP_VALUE_CONV_HUMAN,
+    }
+
     @staticmethod
     def _get_man_pro_value(obj, key, value_conv_enum, value_conv_human,
                            flag_human, flag_enum):
@@ -506,7 +638,10 @@ class DisplayData(object):
                 value = value_conv_enum[key](value)
         if flag_human:
             if key in value_conv_human:
-                value = size_bytes_2_size_human(value)
+                if type(value) is list:
+                    value = list(size_bytes_2_size_human(s) for s in value)
+                else:
+                    value = size_bytes_2_size_human(value)
         return value
 
     @staticmethod

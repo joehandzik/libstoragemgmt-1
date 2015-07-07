@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# along with this program; If not, see <http://www.gnu.org/licenses/>.
 # USA.
 #
 # Author: tasleson
@@ -142,7 +141,7 @@ def parse_display(op):
     for line in out.split('\n'):
         elem = line.split(sep)
         if len(elem) > 1:
-            rc.append(elem)
+            rc.append(list(d.strip() for d in elem))
     return rc
 
 
@@ -541,6 +540,7 @@ def test_fs_creation(cap, system_id):
 
     if cap['FS_CHILD_DEPENDENCY_RM']:
         fs_id = fs_create(pool_id)
+        clone_fs(fs_id)
         fs_child_dependancy_rm(fs_id)
         delete_fs(fs_id)
 
@@ -593,7 +593,6 @@ def test_mapping(cap, system_id):
 
             if cap['ACCESS_GROUP_INITIATOR_DELETE']:
                 access_group_remove_init(ag_id, iqn1)
-                access_group_remove_init(ag_id, iqn2)
 
             if cap['ACCESS_GROUP_DELETE']:
                 access_group_delete(ag_id)
@@ -677,6 +676,99 @@ def search_test(cap, system_id):
     return
 
 
+def volume_raid_info_test(cap, system_id):
+    if cap['VOLUME_RAID_INFO'] and cap['VOLUME_CREATE']:
+        test_pool_id = name_to_id(OP_POOL, test_pool_name)
+
+        if test_pool_id is None:
+            print 'Pool %s is not available!' % test_pool_name
+            exit(10)
+
+        vol_id = create_volume(test_pool_id)
+        out = call([cmd, '-t' + sep, 'volume-raid-info', '--vol', vol_id])[1]
+        r = parse(out)
+        if len(r[0]) != 6:
+            print "volume-raid-info got expected output: %s" % out
+            exit(10)
+        if r[0][0] != vol_id:
+            print "volume-raid-info output volume ID is not requested " \
+                  "volume ID %s" % out
+            exit(10)
+    return
+
+
+def pool_member_info_test(cap, system_id):
+    if cap['POOL_MEMBER_INFO']:
+        out = call([cmd, '-t' + sep, 'list', '--type', 'POOLS'])[1]
+        pool_list = parse(out)
+        for pool in pool_list:
+            out = call(
+                [cmd, '-t' + sep, 'pool-member-info', '--pool', pool[0]])[1]
+            r = parse(out)
+            if len(r[0]) != 4:
+                print "pool-member-info got expected output: %s" % out
+                exit(10)
+            if r[0][0] != pool[0]:
+                print "pool-member-info output pool ID is not requested " \
+                      "pool ID %s" % out
+                exit(10)
+    return
+
+
+def volume_raid_create_test(cap, system_id):
+    if cap['VOLUME_RAID_CREATE']:
+        out = call(
+            [cmd, '-t' + sep, 'volume-create-raid-cap', '--sys', system_id])[1]
+
+        if 'RAID1' not in [r[1] for r in parse(out)]:
+            return
+
+        out = call([cmd, '-t' + sep, 'list', '--type', 'disks'])[1]
+        free_disk_ids = []
+        disk_list = parse(out)
+        for disk in disk_list:
+            if 'Free' in disk:
+                if len(free_disk_ids) == 2:
+                    break
+                free_disk_ids.append(disk[0])
+
+        if len(free_disk_ids) != 2:
+            print "Require two free disks to test volume-create-raid"
+            exit(10)
+
+        out = call([
+            cmd, '-t' + sep, 'volume-create-raid', '--disk', free_disk_ids[0],
+            '--disk', free_disk_ids[1], '--name', 'test_volume_raid_create',
+            '--raid-type', 'raid1'])[1]
+
+        volume = parse(out)
+        vol_id = volume[0][0]
+        pool_id = volume[0][-2]
+
+        if cap['VOLUME_RAID_INFO']:
+            out = call(
+                [cmd, '-t' + sep, 'volume-raid-info', '--vol', vol_id])[1]
+            if parse(out)[0][1] != 'RAID1':
+                print "New volume is not RAID 1"
+                exit(10)
+
+        if cap['POOL_MEMBER_INFO']:
+            out = call(
+                [cmd, '-t' + sep, 'pool-member-info', '--pool', pool_id])[1]
+            if parse(out)[0][1] != 'RAID1':
+                print "New pool is not RAID 1"
+                exit(10)
+            for disk_id in free_disk_ids:
+                if disk_id not in [p[3] for p in parse(out)]:
+                    print "New pool does not contain requested disks"
+                    exit(10)
+
+        if cap['VOLUME_DELETE']:
+            volume_delete(vol_id)
+
+    return
+
+
 def run_all_tests(cap, system_id):
     test_display(cap, system_id)
     test_plugin_list(cap, system_id)
@@ -687,6 +779,12 @@ def run_all_tests(cap, system_id):
     test_mapping(cap, system_id)
 
     search_test(cap, system_id)
+
+    volume_raid_info_test(cap, system_id)
+
+    pool_member_info_test(cap, system_id)
+
+    volume_raid_create_test(cap, system_id)
 
 if __name__ == "__main__":
     parser = OptionParser()

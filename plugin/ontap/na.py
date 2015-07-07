@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 
@@ -231,11 +230,15 @@ class Filer(object):
         disks = self._invoke('disk-list-info')
         return disks['disk-details']['disk-detail-info']
 
-    def aggregates(self):
+    def aggregates(self, aggr_name=None):
         """
         Return a list of aggregates
+        If aggr_name provided, return [na_aggr]
         """
-        pools = self._invoke('aggr-list-info')
+        if aggr_name:
+            pools = self._invoke('aggr-list-info', {'aggregate': aggr_name})
+        else:
+            pools = self._invoke('aggr-list-info')
         tmp = pools['aggregates']['aggr-info']
         return to_list(tmp)
 

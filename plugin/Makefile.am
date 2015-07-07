@@ -1,4 +1,4 @@
-SUBDIRS=simc
+SUBDIRS=simc megaraid hpsa
 
 plugindir = $(pythondir)/lsm/plugin
 

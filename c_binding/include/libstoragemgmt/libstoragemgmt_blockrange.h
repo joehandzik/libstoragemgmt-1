@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -33,16 +32,16 @@ extern "C" {
  * @param block_count           Number of blocks to replicate
  * @return Valid block range ptr, otherwise NULL
  */
-lsm_block_range LSM_DLL_EXPORT *lsm_block_range_record_alloc(uint64_t source_start,
-                                                        uint64_t dest_start,
-                                                        uint64_t block_count);
+lsm_block_range LSM_DLL_EXPORT *
+    lsm_block_range_record_alloc(uint64_t source_start, uint64_t dest_start,
+                                 uint64_t block_count);
 
 /**
  * Frees a block range record.
  * @param br        Block range to free
  * @return LSM_ERR_OK on success, else error reason.
  */
-int LSM_DLL_EXPORT lsm_block_range_record_free( lsm_block_range *br);
+int LSM_DLL_EXPORT lsm_block_range_record_free(lsm_block_range * br);
 
 
 /**
@@ -50,7 +49,8 @@ int LSM_DLL_EXPORT lsm_block_range_record_free( lsm_block_range *br);
  * @param source            Source of the copy
  * @return copy of source
  */
-lsm_block_range LSM_DLL_EXPORT *lsm_block_range_record_copy( lsm_block_range *source );
+lsm_block_range LSM_DLL_EXPORT *
+    lsm_block_range_record_copy(lsm_block_range * source);
 
 
 /**
@@ -58,7 +58,8 @@ lsm_block_range LSM_DLL_EXPORT *lsm_block_range_record_copy( lsm_block_range *so
  * @param size                  Number of elements to store.
  * @return  Pointer to memory for array of block ranges.
  */
-lsm_block_range LSM_DLL_EXPORT **lsm_block_range_record_array_alloc( uint32_t size );
+lsm_block_range LSM_DLL_EXPORT **
+    lsm_block_range_record_array_alloc(uint32_t size);
 
 
 /**
@@ -67,15 +68,16 @@ lsm_block_range LSM_DLL_EXPORT **lsm_block_range_record_array_alloc( uint32_t si
  * @param size                  Number of elements in array.
  * @return LSM_ERR_OK on success, else error reason.
  */
-int LSM_DLL_EXPORT lsm_block_range_record_array_free( lsm_block_range *br[],
-                                                    uint32_t size );
+int LSM_DLL_EXPORT lsm_block_range_record_array_free(lsm_block_range *br[],
+                                                     uint32_t size);
 
 /**
  * Retrieves the source block address.
  * @param br        Valid block range pointer
  * @return value of source start.
  */
-uint64_t LSM_DLL_EXPORT lsm_block_range_source_start_get(lsm_block_range *br);
+uint64_t LSM_DLL_EXPORT
+    lsm_block_range_source_start_get(lsm_block_range *br);
 
 /**
  * Retrieves the dest block address.
@@ -94,5 +96,4 @@ uint64_t LSM_DLL_EXPORT lsm_block_range_block_count_get(lsm_block_range *br);
 #ifdef  __cplusplus
 }
 #endif
-
 #endif

@@ -11,8 +11,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
  */
@@ -23,25 +22,20 @@
 #include <map>
 #include "libstoragemgmt/libstoragemgmt_common.h"
 
-template <typename K, typename V>
-class LSM_DLL_LOCAL static_map
-{
-private:
-    std::map<K, V> _m;
-public:
-    static_map(const K& key, const V& val)
-    {
+template < typename K, typename V > class LSM_DLL_LOCAL static_map {
+  private:
+    std::map < K, V > _m;
+  public:
+    static_map(const K & key, const V & val) {
         _m[key] = val;
     }
 
-    static_map<K, V>& operator()(const K& key, const V& val)
-    {
+    static_map < K, V > &operator()(const K & key, const V & val) {
         _m[key] = val;
         return *this;
     }
 
-    operator std::map<K, V>()
-    {
+    operator   std::map < K, V > () {
         return _m;
     }
 };

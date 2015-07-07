@@ -13,13 +13,13 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: legkodymov
 #         Gris Ge <fge@redhat.com>
 
 import urllib2
+import sys
 import urlparse
 try:
     import simplejson as json
@@ -50,6 +50,10 @@ def handle_nstor_errors(method):
 
 
 class NexentaStor(INfs, IStorageAreaNetwork):
+
+    _V3_PORT = '2000'   # Management port for v3.x device
+    _V4_PORT = '8457'   # Management port for v4.x device
+
     def plugin_info(self, flags=0):
         # TODO: Change this to something more appropriate
         return "NexentaStor support", VERSION
@@ -59,16 +63,16 @@ class NexentaStor(INfs, IStorageAreaNetwork):
         self.password = None
         self.timeout = None
         self._system = None
+        self._port = NexentaStor._V3_PORT
+        self._scheme = 'http'
 
     def _ns_request(self, path, data):
         response = None
-        data = json.dumps(data)
-        scheme = 'http'
-        if self.uparse.scheme.lower() == 'nstor+ssl':
-            scheme = 'https'
-        port = self.uparse.port or '2000'
-        url = '%s://%s:%s/%s' % (scheme, self.uparse.hostname, port, path)
-        request = urllib2.Request(url, data)
+        parms = json.dumps(data)
+
+        url = '%s://%s:%s/%s' % \
+              (self._scheme, self.uparse.hostname, self._port, path)
+        request = urllib2.Request(url, parms)
 
         username = self.uparse.username or 'admin'
         base64string = base64.encodestring('%s:%s' %
@@ -78,7 +82,17 @@ class NexentaStor(INfs, IStorageAreaNetwork):
         try:
             response = urllib2.urlopen(request, timeout=self.timeout / 1000)
         except Exception as e:
-            common_urllib2_error_handler(e)
+            try:
+                common_urllib2_error_handler(e)
+            except LsmError as lsm_e:
+                exc_info = sys.exc_info()
+                if lsm_e.code == ErrorNumber.NETWORK_CONNREFUSED:
+                    if not self.uparse.port and \
+                            self._port == NexentaStor._V3_PORT:
+                        self._port = NexentaStor._V4_PORT
+                        return self._ns_request(path, data)
+
+                raise exc_info[0], exc_info[1], exc_info[2]
 
         resp_json = response.read()
         resp = json.loads(resp_json)
@@ -103,8 +117,8 @@ class NexentaStor(INfs, IStorageAreaNetwork):
     @property
     def system(self):
         if self._system is None:
-            license_info = self._request("get_license_info", "appliance", [""])
-            fqdn = self._request("get_fqdn", "appliance", [""])
+            license_info = self._request("get_license_info", "appliance", [])
+            fqdn = self._request("get_fqdn", "appliance", [])
             self._system = System(license_info['machine_sig'], fqdn,
                                   System.STATUS_OK, '')
         return self._system
@@ -113,6 +127,12 @@ class NexentaStor(INfs, IStorageAreaNetwork):
         self.uparse = urlparse.urlparse(uri)
         self.password = password or 'nexenta'
         self.timeout = timeout
+
+        if self.uparse.port:
+            self._port = self.uparse.port
+
+        if self.uparse.scheme.lower() == 'nstor+ssl':
+            self._scheme = 'https'
 
     @staticmethod
     def _to_bytes(size):
@@ -739,7 +759,7 @@ class NexentaStor(INfs, IStorageAreaNetwork):
         vols = self.volumes_accessible_by_access_group(access_group)
         if len(vols):
             raise LsmError(ErrorNumber.IS_MASKED,
-                               "Access Group has volume(s) masked")
+                           "Access Group has volume(s) masked")
 
         self._request("destroy_hostgroup", "stmf", [access_group.name])
         return

@@ -10,8 +10,7 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: tasleson
 
@@ -132,8 +131,10 @@ class PluginRunner(object):
                     self.tp.send_error(msg_id, lsm_err.code, lsm_err.msg,
                                        lsm_err.data)
         except _SocketEOF:
-            #Client went away
-            error('Client went away, exiting plug-in')
+            #Client went away and didn't meet our expectations for protocol,
+            #this error message should not be seen as it shouldn't be occuring.
+            if need_shutdown:
+                error('Client went away, exiting plug-in')
         except Exception:
             error("Unhandled exception in plug-in!\n" + traceback.format_exc())
 
