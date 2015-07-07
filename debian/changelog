@@ -1,3 +1,18 @@
+libstoragemgmt (1.2.3-1) UNRELEASED; urgency=medium
+
+  [ vaidyanath ]
+  * [2a8b618] Revert "Imported Upstream version 1.1.0"
+
+  [ Ritesh Raj Sarraf ]
+  * [79a906a] Update upstream URL
+
+  [ vaidyanath ]
+  * [a37accc] Imported Upstream version 1.2.3
+
+  [ vaidy ]
+
+ -- vaidyanath <vaidyanath.m@gmail.com>  Tue, 07 Jul 2015 14:27:07 +0530
+
 libstoragemgmt (1.1.0-1) unstable; urgency=medium
 
   [ vaidyanath ]
