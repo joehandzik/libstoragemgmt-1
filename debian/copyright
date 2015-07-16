@@ -4,29 +4,21 @@ Upstream-Contact: Tony Asleson <tasleson@redhat.com>
 Source: https://github.com/libstorage/libstoragemgmt
 
 Files: *
-Copyright: 2011 - 2012 Red Hat, Inc.
+Copyright: 2011 - 2015 Red Hat, Inc.
 License: LGPL-2.1+
- This package is free software; you can redistribute it and/or modify
- it under the terms of the GNU Lesser General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- .
- This package is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Lesser General Public License for more details.
- .
- You should have received a copy of the GNU Lesser General Public License
- along with this program. If not, see <http://www.gnu.org/licenses/>
- .
- On Debian systems, the complete text of the GNU Lesser General
- Public License version 2 can be found in "/usr/share/common-licenses/LGPL-2.1".
 
-Files: lsm/lsm/external/daemon.py
+
+Files: python_binding/lsm/external/daemon.py
 Copyright: 2008 Sander Marechal
 License: Public Domain
 
-Files: lsm/lsm/external/enumeration.py lsm/lsm/external/xmltodict.py
+
+Files: tools/udev/scan-scsi-target.c
+Copyright: 2013 Red Hat Inc
+License: GPL-2+
+
+
+Files: python_binding/lsm/external/enumeration.py python_binding/lsm/external/xmltodict.py
 License: Python Software Foundation License
  The latest version of the license, and all its details,
  can be found at http://docs.python.org/license.html
@@ -78,6 +70,43 @@ License: Python Software Foundation License
  8. By copying, installing or otherwise using Python, Licensee
  agrees to be bound by the terms and conditions of this License
  Agreement.
+
+
+License: GPL-2+
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>
+ .
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+
+License: LGPL-2.1+
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 2 can be found in "/usr/share/common-licenses/LGPL-2.1".
+
 
 Files: debian/*
 Copyright: 2012 Ritesh Raj Sarraf <rrs@debian.org>
