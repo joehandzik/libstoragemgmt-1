@@ -1,17 +1,16 @@
-libstoragemgmt (1.2.3-1) UNRELEASED; urgency=medium
-
-  [ vaidyanath ]
-  * [2a8b618] Revert "Imported Upstream version 1.1.0"
-
-  [ Ritesh Raj Sarraf ]
-  * [79a906a] Update upstream URL
+libstoragemgmt (1.2.3-1) unstable; urgency=medium
 
   [ vaidyanath ]
   * [a37accc] Imported Upstream version 1.2.3
 
-  [ vaidy ]
+  [ Ritesh Raj Sarraf ]
+  * [79a906a] Update upstream URL
+  * [f592979] Bump library version
+  * [ef683f1] Revert "Add +License: LGPL-2.1+"
+  * [8ca62b2] Update debian/copyright with license and copyright information
+  * [4d2c178] Drop reference to non-existent daemon.py
 
- -- vaidyanath <vaidyanath.m@gmail.com>  Tue, 07 Jul 2015 14:27:07 +0530
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Thu, 16 Jul 2015 14:14:23 +0530
 
 libstoragemgmt (1.1.0-1) unstable; urgency=medium
 
