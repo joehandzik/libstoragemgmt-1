@@ -1,5 +1,207 @@
 News for libStorageMgmt
 
+1.3.2: May 18 2016:
+    - Bug fixes:
+        * https://github.com/libstorage/libstoragemgmt/pull/152
+        * https://github.com/libstorage/libstoragemgmt/pull/154
+
+1.3.1: May 13 2016:
+    - Bug fix for https://github.com/libstorage/libstoragemgmt/pull/150
+
+1.3.0: May 12 2016:
+    - Library adds:
+        * Change the raid card cache split (%read, %write)
+        * Retrieve/update cache information of both the card and physical disks
+          (enable/disable caching etc.)
+        * Turn on/off identify and fault LEDs
+        * Retrieve information on batteries
+        * Retrieve a physical disk RPM, link type and location string for a disk
+        * Retrieve the vpd 0x83 for directly attached disk(s)
+        * Given a vpd 0x83 return list of local disk paths
+        * Given a disk path return the vpd 0x83 value
+        * Retrieve list of local disks
+    - Bug fixes:
+        * https://github.com/libstorage/libstoragemgmt/issues/118
+        * https://bugzilla.redhat.com/show_bug.cgi?id=1323789
+        * https://github.com/libstorage/libstoragemgmt/issues/144
+
+1.2.3: Jun 24 2015:
+    - Bug fix:
+        * lsmcli bash completion: Fix syntax error.
+        * lsmcli bash completion: Fix volume-delete.
+        * lsmcli bash completion: Add missing completions.
+
+1.2.2: Jun 23 2015:
+    - Bug fixes:
+        * Fix: selinux dac_override
+        * Manpage: Update hpsa and megaraid plugin manpages.
+        * HP Smart Array Plugin: Fix pool querying on P410i.
+        * MegaRAID Plugin: Fix bug when no volume configured.
+
+1.2.1: Jun 17 2015:
+    - Bug fix:
+        * Fix 'make distcheck' error on bash-completion.
+
+1.2.0: Jun 16 2015
+    - New features:
+        * The lsmd daemon now allows plugin to run as root using configure
+          file.
+        * Targetd plugin got full access group support.
+        * The simulator plugin switched from risky pickle to sqlite3 for state
+          saving.
+        * Introduced bash auto completion support for lsmcli command.
+        * Two new plugins for hardware RAID cards:
+            * LSI MegaRAID plugin -- megaraid://
+                Dell PERC and other OEM rebanded MegaRAID cards are also
+                supported.
+            * HP SmartArray plugin -- hpsa://
+    - Library adds:
+        * New method to query RAID information of volume:
+            Python: lsm.Client.volume_raid_info().
+            C: lsm_volume_raid_info().
+        * New method to query pool membership:
+            Python: lsm.Client.pool_member_info().
+            C: lsm_pool_member_info().
+        * New disk status constant to indicate certain disk could be used as
+          pool disk or dedicate spare disk.
+            Python: DISK.STATUS_FREE.
+            C: LSM_DISK_STATUS_FREE.
+        * New method to create RAID volume on hardware RAID cards:
+            Python: lsm.Client.volume_raid_create_cap_get().
+                    lsm.Client.volume_raid_create().
+            C: lsm_volume_raid_create_cap_get().
+               lsm_volume_raid_create().
+        * New C plugin register interface for version 1.2 new methods:
+            lsm_register_plugin_v1_2()
+    - Bug fixes and miscellaneous fixes:
+        * lsmd: Fix a possible infinity loop on plugin search.
+        * Fix memory leak in C unit test.
+        * Library: Fix incorrect Volume.vpd83 definition
+        * SMI-S plugin: Fix SMI-S plugin spare disk support.
+        * SMI-S plugin: Fix target_ports() for HP 3PAR and EMC VMAX.
+        * SMI-S plugin: Fix the incorrect profile_check().
+        * Fix C library compile warning.
+        * Fix C library potential memory leak in handle_volume_raid_create().
+        * ONTAP, MegaRAID, SMI-S Plugins: Enforce the definition of Pool.status.
+        * Change license statement by replacing address to URL.
+        * lsmd: add error catch for signal.
+        * lsmcli: fix _get_item error message.
+        * C Library: Fix message loop
+        * C Library: Clean up code for DRY(don't repeat yourself).
+        * SMI-S Plugin: Collect xml during exception.
+        * C Library: Remove ambiguity between wrong type or OOM
+        * C code clean up to use K&R code style.
+        * Add Charles Rose to AUTHORS.
+
+1.1.1: Dec 4 2014
+    - Library adds:
+
+      API Constants for new pool element types and plugin changes to support it
+      * C constants:
+         LSM_POOL_ELEMENT_TYPE_VOLUME_FULL, LSM_POOL_ELEMENT_TYPE_VOLUME_THIN
+      * Py constants:
+         Pool.ELEMENT_TYPE_VOLUME_FULL, Poll.ELEMENT_TYPE_THIN
+
+      lsmcli:
+      * lt - Alias for 'list --type target_ports'
+      * Removed --init for volume-mask, it was broken for targetd (the only
+        user) and instead of fixing we are going to improve targetd to support
+        access groups in the next release
+
+    - Numerous code improvements, including a big SMI-S plugin refactor,
+      source code documentation corrections
+
+    - Bug fix: Use correct default values for anonymous uid/gid in lsmcli
+    - Bug fix: simc simulator not working for allowable NULL parameters for:
+      *  fs_child_dependency
+      *  fs_child_dependency_rm
+      *  fs_snapshot_restore
+    - Bug fix: lsm_restd memory leak corrections
+    - Bug fix: NetApp plugin, correctly set export path when caller specifies
+      default in API
+    - Bug fix: Add file locking to sim plugin to prevent concurrent modification
+    - Bug fix: Consistently report common error conditions for NO_STATE_CHANGE,
+      EXISTS_INITIATOR for all plugins
+    - Bug fix: Number of bugs addressed in SMI-S plugin including:
+      * EMC: Correct error path when replicating a volume with a duplicate
+        volume name
+      * HDS: Correctly create thinly provisioned volume on thinly provisioned
+        pool
+
+1.0.0: Sep 7 2014
+    - Release version 1
+    - Numerous constants re-naming & removing
+    - Removed the pool create/delete until things work better,
+      esp. WRT SMI-S
+    - Added checks for initiator ID verification
+    - Added checks for vpd 0x83 verification
+    - Simplified error logging (removed domain & level)
+    - Re-named functions for online,offline -> enable,disable
+    - Always use objects instead of object ID in function
+      params
+    - Removed individual files from fs snapshot creation
+    - Add unsupported actions for pools
+    - lsm_capability_set_n uses a -1 to terminate list
+    - Volume status removed, replaced with admin state
+    - Removed ibmiv7k plugin
+    - Explicitly specify python2
+    - Error path consistency changes (same error for same condition
+      across plug-ins)
+    - Numerous bug fixes
+
+0.1.0: Jul 3 2014
+    - Release candidate for a 1.0.0 release
+    - Optional data removed
+    - Initiator only functions removed
+    - Pool create from from volumes removed
+    - Code directory structure updated
+    - Target port listing added
+
+0.0.24: Jan 30 2014
+    - Command line interface (CLI) re-factored and improved to be easier to use
+      and more consistent, man pages have been updated
+    - Command line output now has '-s, --script' for an additional way to output
+      information for consumption in scripts
+    - Command line option '-o' for retrieving optional/extended data for disks &
+      pools
+    - Pool creation/deleting in CLI & python API
+    - Numerous small bug fixes
+    - C API, added ability to list disks, list plugins and retrieve optional
+      data for disks
+    - SSL for SMI-S is more stringent on certificate checking for newer
+      distributions, new URI option "no_ssl_verify=yes" to disable
+
+0.0.23: Nov 27 2013
+    - Addition of listing disks implemented for SMI-S and Ontap plugins
+      (new, not in C library yet)
+    - Add the ability to list currently installed and usable plug-ins
+    - Verify return types are correct in python client calls
+    - Added the ability to retrieve optional data (new, not in C library yet)
+    - Visibility reductions for python code (somethings were public when should be
+      private
+    - Add calls to create/delete pools (new, not in C library yet)
+    - Add missing initiator type for SAS
+    - Improved vpd83 retrieval for SMI-S
+    - Performance improvements for SMI-S plug-in
+    - Numerous small bug fixes
+    - Nstor plugin, additional testing and bug fixes
+    - lsmd, added call to setgroups and enable full relo and PIE (ASLR) for
+      security improvements
+    - simulator state is now versioned
+    - SCSI Unit Attention uevent handling
+
+0.0.22: Aug 12 2013
+    - Numerous code improvments/fixes
+    - BZ 968384
+    - BZ 990577
+
+0.0.21: Jul 16 2013
+    - IEC binary size handling
+    - Functionality improvements for IBM V7K array
+    - Workaround for python bug on F19
+    - Bugfix (BZ 968384)
+    - Package plug-ins as separately in rpm packages
+
 0.0.20: May 24 2013
     - Python library files now in separate rpm
     - Additional debug for plug-ins when exceptions occur
