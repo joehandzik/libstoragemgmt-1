@@ -4,12 +4,13 @@ Upstream-Contact: Tony Asleson <tasleson@redhat.com>
 Source: https://github.com/libstorage/libstoragemgmt
 
 Files: *
-Copyright: 2011 - 2015 Red Hat, Inc.
+Copyright: 2011 - 2016 Red Hat, Inc.
+           2015 - 2016 Hewlett Packard Enterprise Development LP
 License: LGPL-2.1+
 
 
 Files: tools/udev/scan-scsi-target.c
-Copyright: 2013 Red Hat Inc
+Copyright: 2013 - 2016 Red Hat Inc
 License: GPL-2+
 
 
@@ -104,7 +105,8 @@ License: LGPL-2.1+
 
 
 Files: debian/*
-Copyright: 2012 Ritesh Raj Sarraf <rrs@debian.org>
+Copyright: 2012 - 2016 Ritesh Raj Sarraf <rrs@debian.org>
+           2016 Hewlett Packard Enterprise Development LP
 License: LGPL-2+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU Lesser General Public License as published by
