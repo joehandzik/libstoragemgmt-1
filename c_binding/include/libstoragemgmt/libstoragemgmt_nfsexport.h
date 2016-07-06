@@ -31,7 +31,12 @@ extern "C" {
  * will be represented as (2**64-1 and 2**64-2 respectively)
  */
 #define ANON_UID_GID_NA     -1
+/* ^ Deprecated, please use LSM_NFS_EXPORT_ANON_UID_GID_NA instead */
 #define ANON_UID_GID_ERROR (ANON_UID_GID_NA - 1)
+/* ^ Deprecated, please use LSM_NFS_EXPORT_ANON_UID_GID_ERROR instead */
+
+#define LSM_NFS_EXPORT_ANON_UID_GID_NA      -1
+#define LSM_NFS_EXPORT_ANON_UID_GID_ERROR   -2
 
 /**
  * Allocated memory for a NFS export record
@@ -70,7 +75,8 @@ lsm_nfs_export LSM_DLL_EXPORT **
 /**
  * Frees the memory for a NFS export record.
  * @param exp
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_nfs_export_record_free(lsm_nfs_export *exp);
 
@@ -78,7 +84,8 @@ int LSM_DLL_EXPORT lsm_nfs_export_record_free(lsm_nfs_export *exp);
  * Frees the memory for the NFS export array and the memory for each entry
  * @param exps          Memory to free
  * @param size          Number of entries
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  *  */
 int LSM_DLL_EXPORT lsm_nfs_export_record_array_free(lsm_nfs_export * exps[],
                                                     uint32_t size);

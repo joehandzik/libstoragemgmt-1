@@ -1,4 +1,4 @@
-# Copyright (C) 2015 Red Hat, Inc.
+# Copyright (C) 2015-2016 Red Hat, Inc.
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -22,7 +22,7 @@ import math
 
 from lsm import (uri_parse, search_property, size_human_2_size_bytes,
                  Capabilities, LsmError, ErrorNumber, System, Client,
-                 Disk, VERSION, IPlugin, Pool, Volume)
+                 Disk, VERSION, IPlugin, Pool, Volume, Battery)
 
 from lsm.plugin.megaraid.utils import cmd_exec, ExecError
 
@@ -91,22 +91,20 @@ _DISK_STATE_MAP = {
     'UGood': Disk.STATUS_FREE | Disk.STATUS_OK,
     'UBad': Disk.STATUS_FREE | Disk.STATUS_ERROR,
     'Rbld': Disk.STATUS_RECONSTRUCT,
+    'JBOD': Disk.STATUS_OK,
 }
 
 
 def _disk_status_of(disk_show_basic_dict, disk_show_stat_dict):
-    disk_status = _DISK_STATE_MAP.get(
-        disk_show_basic_dict['State'], 0)
+    disk_status = _DISK_STATE_MAP.get(disk_show_basic_dict['State'], 0)
 
     if disk_show_stat_dict['Media Error Count'] or \
-       disk_show_stat_dict['Other Error Count'] or \
        disk_show_stat_dict['S.M.A.R.T alert flagged by drive'] != 'No':
-        disk_status -= Disk.STATUS_OK
-        disk_status |= Disk.STATUS_ERROR
+        disk_status = (disk_status & ~Disk.STATUS_OK) | Disk.STATUS_ERROR
 
     elif disk_show_stat_dict['Predictive Failure Count']:
-        disk_status -= Disk.STATUS_OK
-        disk_status |= Disk.STATUS_PREDICTIVE_FAILURE
+        disk_status = (disk_status & ~Disk.STATUS_OK) | \
+            Disk.STATUS_PREDICTIVE_FAILURE
 
     if disk_show_basic_dict['Sp'] == 'D':
         disk_status |= Disk.STATUS_STOPPED
@@ -125,7 +123,7 @@ def _mega_size_to_lsm(mega_size):
     LSI Using 'TB, GB, MB, KB' and etc, for LSM, they are 'TiB' and etc.
     Return int of block bytes
     """
-    re_regex = re.compile("^([0-9.]+) ([EPTGMK])B$")
+    re_regex = re.compile("^([0-9.]+) *([EPTGMK])B$")
     re_match = re_regex.match(mega_size)
     if re_match:
         return size_human_2_size_bytes(
@@ -206,6 +204,126 @@ def _lsm_raid_type_to_mega(lsm_raid_type):
             "RAID type %d not supported" % lsm_raid_type)
 
 
+def _disk_rpm_of(disk_show_basic_dict):
+    disk_media = disk_show_basic_dict['Med']
+    if disk_media == 'HDD':
+        return Disk.RPM_ROTATING_UNKNOWN_SPEED
+    elif disk_media == 'SSD':
+        return Disk.RPM_NON_ROTATING_MEDIUM
+    return Disk.RPM_UNKNOWN
+
+
+def _disk_link_type_of(disk_show_basic_dict):
+    """
+    Return the 'Drive /c0/e64/s0' entry of '/c0/e64/s0 show all'
+    """
+    disk_interface = disk_show_basic_dict['Intf']
+    if disk_interface == 'SATA':
+        return Disk.LINK_TYPE_ATA
+    elif disk_interface == 'SAS':
+        return Disk.LINK_TYPE_SAS
+    elif disk_interface == 'Parallel SCSI':
+        return Disk.LINK_TYPE_UNKNOWN
+    elif disk_interface == 'FC':
+        return Disk.LINK_TYPE_FC
+
+    return Disk.LINK_TYPE_UNKNOWN
+
+
+def _fix_bbu_cv_output(output):
+    """
+    Command 'storcli /c0/bbu show all' and 'storcli /c0/cv show all' provide
+    output like these list:
+            {
+                "Property" : "Type",
+                "Value" : "BBU"
+            },
+            {
+                "Property" : "Voltage",
+                "Value" : "4003 mV"
+            },
+    Convert them to dict like:
+        {
+            'Type': 'BBU',
+            'Voltage': '4003 mV',
+        }
+    """
+    tmp_dict = dict()
+    for a in output:
+        tmp_dict[a['Property']] = a['Value']
+    return tmp_dict
+
+
+_BBU_STATUS_MAP = {
+    "Optimal": Battery.STATUS_OK,
+    "Missing": Battery.STATUS_ERROR,
+    "Failed": Battery.STATUS_ERROR,
+    "Degraded (need attention)": Battery.STATUS_DEGRADED,
+    # ^ These values are copy from LSI document, except Optimal all other
+    #   values are not tested.
+}
+
+
+def _bbu_status_to_lsm(bbu_status):
+    return _BBU_STATUS_MAP.get(bbu_status, Battery.STATUS_UNKNOWN)
+
+
+_CV_STATUS_MAP = {
+    "Optimal": Battery.STATUS_OK,
+    # TODO(Gris Ge): Need document for all possible values of CacheVault
+    # status.
+}
+
+
+def _cv_status_to_lsm(cv_status):
+    return _CV_STATUS_MAP.get(cv_status, Battery.STATUS_UNKNOWN)
+
+
+def _mega_bbu_to_lsm(sys_id, bbu_show_all_output):
+    design_info = _fix_bbu_cv_output(bbu_show_all_output['BBU_Design_Info'])
+    bbu_info = _fix_bbu_cv_output(bbu_show_all_output['BBU_Info'])
+
+    battery_type = Battery.TYPE_CHEMICAL
+    name = "LSI BBU: %s %s %s %s %s %s" % (
+        design_info['Manufacture Name'],
+        design_info['Device Name'],
+        design_info['Device Chemistry'],
+        design_info['Design Capacity'],
+        design_info['Design Voltage'],
+        design_info['Date of Manufacture'])
+    battery_id = "%s_BBU_%s" % (
+        sys_id, design_info['Serial Number'])
+    status = _bbu_status_to_lsm(bbu_info['Battery State'])
+    plugin_data = None
+
+    return Battery(battery_id, name, battery_type, status, sys_id, plugin_data)
+
+
+def _mega_cv_to_lsm(sys_id, cv_show_all_output):
+    design_info = _fix_bbu_cv_output(cv_show_all_output['Design_Info'])
+    cv_info = _fix_bbu_cv_output(cv_show_all_output['Cachevault_Info'])
+
+    battery_type = Battery.TYPE_CAPACITOR
+    battery_id = "%s_CV_%s" % (sys_id, design_info['Serial Number'])
+    name = "LSI CacheVault: %s %s %s" % (
+        design_info['Device Name'],
+        design_info['Design Capacity'],
+        design_info['Date of Manufacture'])
+    status = _cv_status_to_lsm(cv_info['State'])
+
+    plugin_data = None
+
+    return Battery(battery_id, name, battery_type, status, sys_id, plugin_data)
+
+
+def _vd_path_of_lsm_vol(lsm_vol):
+    if not lsm_vol.plugin_data:
+        raise LsmError(
+            ErrorNumber.INVALID_ARGUMENT,
+            "Illegal input volume argument: missing plugin_data property")
+    return str(lsm_vol.plugin_data)
+
+
 class MegaRAID(IPlugin):
     _DEFAULT_BIN_PATHS = [
         "/opt/MegaRAID/storcli/storcli64", "/opt/MegaRAID/storcli/storcli",
@@ -281,6 +399,12 @@ class MegaRAID(IPlugin):
         cap.set(Capabilities.VOLUME_RAID_INFO)
         cap.set(Capabilities.POOL_MEMBER_INFO)
         cap.set(Capabilities.VOLUME_RAID_CREATE)
+        cap.set(Capabilities.BATTERIES)
+        cap.set(Capabilities.VOLUME_PHYSICAL_DISK_CACHE_UPDATE)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_BACK)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_AUTO)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_THROUGH)
+        cap.set(Capabilities.VOLUME_DELETE)
         return cap
 
     def _storcli_exec(self, storcli_cmds, flag_json=True):
@@ -311,10 +435,11 @@ class MegaRAID(IPlugin):
 
             rc_status = ctrl_output[0].get('Command Status')
             if rc_status.get('Status') != 'Success':
+                detail_status = rc_status['Detailed Status'][0]
                 raise LsmError(
                     ErrorNumber.PLUGIN_BUG,
                     "MegaRAID storcli failed with error %d: %s" %
-                    (rc_status['Status Code'], rc_status['Description']))
+                    (detail_status['ErrCd'], detail_status['ErrMsg']))
             real_data = ctrl_output[0].get('Response Data')
             if real_data and 'Response Data' in real_data.keys():
                 return real_data['Response Data']
@@ -339,7 +464,7 @@ class MegaRAID(IPlugin):
         if lsi_status_info['Controller Status'] == 'Optimal':
             status = System.STATUS_OK
         else:
-        # TODO(Gris Ge): Try pull a disk off to check whether this change.
+            # TODO(Gris Ge): Try pull a disk off to check whether this change.
             status_info = "%s: " % lsi_status_info['Controller Status']
             for key_name in lsi_status_info.keys():
                 if key_name == 'Controller Status':
@@ -366,20 +491,32 @@ class MegaRAID(IPlugin):
             ctrl_show_all_output = self._storcli_exec(
                 ["/c%d" % ctrl_num, "show", "all"])
             sys_id = self._sys_id_of_ctrl_num(ctrl_num, ctrl_show_all_output)
-            sys_name = "%s %s %s ver: %s" % (
+            sys_name = "%s %s %s" % (
                 ctrl_show_all_output['Basics']['Model'],
                 ctrl_show_all_output['Bus']['Host Interface'],
-                ctrl_show_all_output['Basics']['PCI Address'],
-                ctrl_show_all_output['Version']['Firmware Package Build'],
-                )
+                ctrl_show_all_output['Basics']['PCI Address'])
             (status, status_info) = self._lsm_status_of_ctrl(
                 ctrl_show_all_output)
             plugin_data = "/c%d" % ctrl_num
             # Since PCI slot sequence might change.
             # This string just stored for quick system verification.
 
+            fw_ver = "Package: %s, BIOS: %s, FW: %s" % (
+                ctrl_show_all_output["Version"]["Firmware Package Build"],
+                ctrl_show_all_output["Version"]["Bios Version"],
+                ctrl_show_all_output["Version"]["Firmware Version"])
+
+            if ctrl_show_all_output["Capabilities"]["Enable JBOD"] == "Yes":
+                mode = System.MODE_HBA
+            else:
+                mode = System.MODE_HARDWARE_RAID
+            # Notes for JBOD/HBA mode of MegaRAID:
+            # "storcli /c0/e9/s1 set jbod" require "storcli /c0 set jbod=on"
+            # be excuted first.
+
             rc_lsm_syss.append(
-                System(sys_id, sys_name, status, status_info, plugin_data))
+                System(sys_id, sys_name, status, status_info, plugin_data,
+                       _fw_version=fw_ver, _mode=mode))
 
         return rc_lsm_syss
 
@@ -388,13 +525,29 @@ class MegaRAID(IPlugin):
               flags=Client.FLAG_RSVD):
         rc_lsm_disks = []
         mega_disk_path_regex = re.compile(
-            r"^Drive (\/c[0-9]+\/e[0-9]+\/s[0-9]+) - Detailed Information$")
+            r"""
+                ^Drive \ (
+                \/c[0-9]+\/             # Controller ID
+                (:?e[0-9]+\/){0,1}      # Enclosure ID(optional)
+                s[0-9]+                 # Slot ID
+                )\ -\ Detailed\ Information$""", re.X)
 
         for ctrl_num in range(self._ctrl_count()):
             sys_id = self._sys_id_of_ctrl_num(ctrl_num)
 
-            disk_show_output = self._storcli_exec(
-                ["/c%d/eall/sall" % ctrl_num, "show", "all"])
+            try:
+                disk_show_output = self._storcli_exec(
+                    ["/c%d/eall/sall" % ctrl_num, "show", "all"])
+            except ExecError:
+                disk_show_output = {}
+
+            try:
+                disk_show_output.update(
+                    self._storcli_exec(
+                        ["/c%d/sall" % ctrl_num, "show", "all"]))
+            except ExecError:
+                pass
+
             for drive_name in disk_show_output.keys():
                 re_match = mega_disk_path_regex.match(drive_name)
                 if not re_match:
@@ -423,11 +576,15 @@ class MegaRAID(IPlugin):
 
                 plugin_data = "%s:%s" % (
                     ctrl_num, disk_show_basic_dict['EID:Slt'])
+                vpd83 = disk_show_attr_dict["WWN"]
+                rpm = _disk_rpm_of(disk_show_basic_dict)
+                link_type = _disk_link_type_of(disk_show_basic_dict)
 
                 rc_lsm_disks.append(
                     Disk(
                         disk_id, disk_name, disk_type, blk_size, blk_count,
-                        status, sys_id, plugin_data))
+                        status, sys_id, plugin_data, _vpd83=vpd83, _rpm=rpm,
+                        _link_type=link_type))
 
         return search_property(rc_lsm_disks, search_key, search_value)
 
@@ -473,6 +630,8 @@ class MegaRAID(IPlugin):
             dg_show_output = self._storcli_exec(
                 ["/c%d/dall" % ctrl_num, "show", "all"])
             free_space_list = dg_show_output.get('FREE SPACE DETAILS', [])
+            if 'TOPOLOGY' not in dg_show_output:
+                continue
             for dg_top in dg_show_output['TOPOLOGY']:
                 if dg_top['Arr'] != '-':
                     continue
@@ -490,7 +649,12 @@ class MegaRAID(IPlugin):
 
         vol_id = "%s:VD%d" % (sys_id, vd_id)
         name = "VD %d" % vd_id
-        vpd83 = ''  # TODO(Gris Ge): Beg LSI to provide this information.
+        if 'Name' in vd_basic_info.keys() and vd_basic_info['Name']:
+            name += ": %s" % vd_basic_info['Name']
+
+        vpd83 = vd_prop_info.get('SCSI NAA Id', '')
+        if (len(vpd83) != 0):
+            vol_id = vpd83
         block_size = size_human_2_size_bytes(vd_pd_info_list[0]['SeSz'])
         num_of_blocks = vd_prop_info['Number of Blocks']
         admin_state = Volume.ADMIN_STATE_ENABLED
@@ -688,7 +852,7 @@ class MegaRAID(IPlugin):
         mega_raid_type = _lsm_raid_type_to_mega(raid_type)
         ctrl_num = None
         slot_nums = []
-        enclosure_num = None
+        enclosure_str = None
 
         for disk in disks:
             if not disk.plugin_data:
@@ -697,32 +861,40 @@ class MegaRAID(IPlugin):
                     "Illegal input disks argument: missing plugin_data "
                     "property")
             # Disk should from the same controller.
-            (cur_ctrl_num, cur_enclosure_num, slot_num) = \
+            # Please be informed, the enclosure_str could be a empty(space).
+            (cur_ctrl_num, cur_enclosure_str, slot_num) = \
                 disk.plugin_data.split(':')
 
-            if ctrl_num and cur_ctrl_num != ctrl_num:
+            cur_ctrl_num = int(cur_ctrl_num)
+
+            if ctrl_num is not None and cur_ctrl_num != ctrl_num:
                 raise LsmError(
                     ErrorNumber.INVALID_ARGUMENT,
                     "Illegal input disks argument: disks are not from the "
                     "same controller/system.")
 
-            if enclosure_num and cur_enclosure_num != enclosure_num:
+            if enclosure_str is not None and \
+               cur_enclosure_str != enclosure_str:
                 raise LsmError(
                     ErrorNumber.INVALID_ARGUMENT,
                     "Illegal input disks argument: disks are not from the "
                     "same disk enclosure.")
 
-            ctrl_num = int(cur_ctrl_num)
-            enclosure_num = cur_enclosure_num
+            ctrl_num = cur_ctrl_num
+            enclosure_str = cur_enclosure_str
             slot_nums.append(slot_num)
 
         # Handle request volume name, LSI only allow 15 characters.
         name = re.sub('[^0-9a-zA-Z_\-]+', '', name)[:15]
 
+        if enclosure_str == ' ':
+            drives_str = "drives=%s" % ','.join(slot_nums)
+        else:
+            drives_str = "drives=%s:%s" % (enclosure_str, ','.join(slot_nums))
+
         cmds = [
             "/c%s" % ctrl_num, "add", "vd", mega_raid_type,
-            'size=all', "name=%s" % name,
-            "drives=%s:%s" % (enclosure_num, ','.join(slot_nums))]
+            'size=all', "name=%s" % name, drives_str]
 
         if raid_type == Volume.RAID_TYPE_RAID10 or \
            raid_type == Volume.RAID_TYPE_RAID50 or \
@@ -782,3 +954,189 @@ class MegaRAID(IPlugin):
                 "when creating RAID volume")
 
         return lsm_vols[0]
+
+    @_handle_errors
+    def batteries(self, search_key=None, search_value=None,
+                  flags=Client.FLAG_RSVD):
+        """
+        Depending on these commands:
+            storcli /c0/bbu show all J
+            storcli /c0/cv show all J
+        """
+        lsm_bats = []
+        for ctrl_num in range(self._ctrl_count()):
+            ctrl_show_all_output = self._storcli_exec(
+                ["/c%d" % ctrl_num, "show", "all"])
+            sys_id = self._sys_id_of_ctrl_num(ctrl_num, ctrl_show_all_output)
+
+            try:
+                bbu_show_all_output = self._storcli_exec(
+                    ["/c%d/bbu" % ctrl_num, "show", "all"])
+            except ExecError as exec_error:
+                bbu_show_all_output = None
+
+            if bbu_show_all_output:
+                lsm_bats.append(_mega_bbu_to_lsm(sys_id, bbu_show_all_output))
+
+            # Capacitor
+            try:
+                cv_show_all_output = self._storcli_exec(
+                    ["/c%d/cv" % ctrl_num, "show", "all"])
+            except ExecError as exec_error:
+                cv_show_all_output = None
+
+            if cv_show_all_output:
+                lsm_bats.append(_mega_cv_to_lsm(sys_id, cv_show_all_output))
+
+        return search_property(lsm_bats, search_key, search_value)
+
+    @_handle_errors
+    def volume_cache_info(self, volume, flags=Client.FLAG_RSVD):
+        """
+        Depending on these commands:
+            storcli /c0/v0 show all J
+        """
+        flag_has_ram = False
+        flag_battery_ok = False
+
+        vd_path = _vd_path_of_lsm_vol(volume)
+
+        vol_show_output = self._storcli_exec([vd_path, "show", "all"])
+        vd_basic_info = vol_show_output[vd_path][0]
+        vd_id = int(vd_basic_info['DG/VD'].split('/')[-1])
+        vd_prop_info = vol_show_output['VD%d Properties' % vd_id]
+
+        sys_all_output = self._storcli_exec(
+            ["/%s" % vd_path.split('/')[1], "show", "all"])
+
+        write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_THROUGH
+        read_cache_status = Volume.READ_CACHE_STATUS_DISABLED
+
+        ram_size = _mega_size_to_lsm(
+            sys_all_output['HwCfg'].get('On Board Memory Size', '0 KB'))
+        if ram_size > 0:
+            flag_has_ram = True
+
+        lsm_bats = self.batteries()
+        for lsm_bat in lsm_bats:
+            if lsm_bat.status == Battery.STATUS_OK:
+                flag_battery_ok = True
+
+        lsi_cache_setting = vd_basic_info['Cache']
+        if lsi_cache_setting[0] == 'R':
+            read_cache_policy = Volume.READ_CACHE_POLICY_ENABLED
+            if flag_has_ram:
+                read_cache_status = Volume.READ_CACHE_STATUS_ENABLED
+        elif lsi_cache_setting[0:2] == 'NR':
+            read_cache_policy = Volume.READ_CACHE_POLICY_DISABLED
+        else:
+            raise LsmError(
+                ErrorNumber.PLUGIN_BUG,
+                "Unknown read cache %s for volume %s" %
+                (lsi_cache_setting, vd_path))
+
+        if 'AWB' in lsi_cache_setting:
+            write_cache_policy = Volume.WRITE_CACHE_POLICY_WRITE_BACK
+            if flag_has_ram:
+                write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_BACK
+        elif 'WB' in lsi_cache_setting:
+            # This mode means enable write cache when battery or CacheVault
+            # is healthy.
+            write_cache_policy = Volume.WRITE_CACHE_POLICY_AUTO
+            if flag_has_ram and flag_battery_ok:
+                write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_BACK
+        elif 'WT' in lsi_cache_setting:
+            write_cache_policy = Volume.WRITE_CACHE_POLICY_WRITE_THROUGH
+        else:
+            raise LsmError(
+                ErrorNumber.PLUGIN_BUG,
+                "Unknown write cache %s for volume %s" %
+                (lsi_cache_setting, vd_path))
+
+        # TODO(Gris Ge): When 'Block SSD Write Disk Cache Change' of
+        #                'Supported Adapter Operations' is 'Yes'
+        lsi_disk_cache_setting = vd_prop_info['Disk Cache Policy']
+        if lsi_disk_cache_setting == 'Disabled':
+            phy_disk_cache = Volume.PHYSICAL_DISK_CACHE_DISABLED
+        elif lsi_disk_cache_setting == 'Enabled':
+            phy_disk_cache = Volume.PHYSICAL_DISK_CACHE_ENABLED
+        elif lsi_disk_cache_setting == "Disk's Default":
+            phy_disk_cache = Volume.PHYSICAL_DISK_CACHE_USE_DISK_SETTING
+        else:
+            raise LsmError(
+                ErrorNumber.PLUGIN_BUG,
+                "Unknown disk cache policy '%s' for volume %s" %
+                (lsi_disk_cache_setting, vd_path))
+
+        return [write_cache_policy, write_cache_status,
+                read_cache_policy, read_cache_status, phy_disk_cache]
+
+    @_handle_errors
+    def volume_physical_disk_cache_update(self, volume, pdc,
+                                          flags=Client.FLAG_RSVD):
+        """
+        Depending on "storcli /c0/vX set pdcache=<on|off>" command.
+        """
+        cmd = [_vd_path_of_lsm_vol(volume), "set"]
+        if pdc == Volume.PHYSICAL_DISK_CACHE_ENABLED:
+            cmd.append("pdcache=on")
+        elif pdc == Volume.PHYSICAL_DISK_CACHE_DISABLED:
+            cmd.append("pdcache=off")
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Got unknown pdc: %d" % pdc)
+        try:
+            self._storcli_exec(cmd)
+            # On SSD disk, the command will return 0 for failure, only
+            # json output will indicate error.
+        except LsmError as lsm_err:
+            if lsm_err.code == ErrorNumber.PLUGIN_BUG and \
+               "SSD Pd is present" in lsm_err.msg:
+                raise LsmError(
+                    ErrorNumber.NO_SUPPORT,
+                    "Changing SSD physical disk cache is not allowed "
+                    "on MegaRAID")
+            raise
+
+    @_handle_errors
+    def volume_write_cache_policy_update(self, volume, wcp,
+                                         flags=Client.FLAG_RSVD):
+        """
+        Depending on "storcli /c0/vX set wrcache=<wt|wb|awb>" command.
+        """
+        cmd = [_vd_path_of_lsm_vol(volume), "set"]
+        if wcp == Volume.WRITE_CACHE_POLICY_WRITE_BACK:
+            cmd.append("wrcache=awb")
+        elif wcp == Volume.WRITE_CACHE_POLICY_AUTO:
+            cmd.append("wrcache=wb")
+        elif wcp == Volume.WRITE_CACHE_POLICY_WRITE_THROUGH:
+            cmd.append("wrcache=wt")
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Got unknown wcp: %d" % wcp)
+        self._storcli_exec(cmd)
+
+    @_handle_errors
+    def volume_read_cache_policy_update(self, volume, rcp,
+                                        flags=Client.FLAG_RSVD):
+        """
+        storcli always enable read cache and no way to change it
+        """
+        raise LsmError(ErrorNumber.NO_SUPPORT,
+                       "LSI MegaRAID always enable read cache and refused to "
+                       "change that.")
+
+    @_handle_errors
+    def volume_delete(self, volume, flags=Client.FLAG_RSVD):
+        """
+        Depending on this command:
+            storcli /cx/vx del force
+        """
+        lsm_vols = self.volumes(search_key='id', search_value=volume.id)
+        if len(lsm_vols) == 0:
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+
+        cmd = [lsm_vols[0].plugin_data, 'del', 'force']
+        self._storcli_exec(cmd)

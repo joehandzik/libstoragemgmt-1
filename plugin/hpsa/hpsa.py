@@ -1,4 +1,5 @@
-# Copyright (C) 2015 Red Hat, Inc.
+# Copyright (C) 2015-2016 Red Hat, Inc.
+# (C) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -13,16 +14,22 @@
 # License along with this library; If not, see <http://www.gnu.org/licenses/>.
 #
 # Author: Gris Ge <fge@redhat.com>
+#         Joe Handzik <joseph.t.handzik@hpe.com>
 
 import os
 import errno
 import re
 
+from pyudev import Context, Device, DeviceNotFoundError
+
 from lsm import (
     IPlugin, Client, Capabilities, VERSION, LsmError, ErrorNumber, uri_parse,
-    System, Pool, size_human_2_size_bytes, search_property, Volume, Disk)
+    System, Pool, size_human_2_size_bytes, search_property, Volume, Disk,
+    LocalDisk, Battery)
 
-from lsm.plugin.hpsa.utils import cmd_exec, ExecError, file_read
+from lsm.plugin.hpsa.utils import cmd_exec, ExecError
+
+_CONTEXT = Context()
 
 
 def _handle_errors(method):
@@ -60,52 +67,72 @@ def _sys_status_of(hp_ctrl_status):
     check_list = [
         'Controller Status', 'Cache Status', 'Battery/Capacitor Status']
     for key_name in check_list:
-        if key_name in hp_ctrl_status and hp_ctrl_status[key_name] != 'OK':
-            # TODO(Gris Ge): Beg HP for possible values
-            status = System.STATUS_OTHER
+        if key_name in hp_ctrl_status:
+            if hp_ctrl_status[key_name] == 'Not Configured':
+                status = System.STATUS_OK
+            elif hp_ctrl_status[key_name] == 'OK':
+                status = System.STATUS_OK
+            else:
+                status = System.STATUS_OTHER
             status_info += hp_ctrl_status[key_name]
 
-    if status != System.STATUS_OTHER:
-        status = System.STATUS_OK
-
     return status, status_info
+
+
+# This fixes an HPSSACLI  bug where "Mirror Group N:" items are not
+# properly indented. This will indent (shunt) them to the appropriate level.
+def _fix_mirror_group_lines(output_lines):
+    mg_indent_level = None
+    for line_num in range(len(output_lines)):
+        cur_line = output_lines[line_num]
+        cur_indent_level = len(cur_line) - len(cur_line.lstrip())
+        if cur_line.lstrip().startswith('Mirror Group '):
+            mg_indent_level = cur_indent_level
+        elif ((mg_indent_level is not None) and
+              (cur_indent_level < mg_indent_level)):
+            shunted_line = ' '*2*(mg_indent_level-cur_indent_level) + cur_line
+            output_lines[line_num] = shunted_line
+        elif mg_indent_level is not None:
+            mg_indent_level = None
 
 
 def _parse_hpssacli_output(output):
     """
     Got a output string of hpssacli to dictionary(nested).
-    Skipped these line:
-        1. Starts with 'Note:'
-           This is just a message right after controller. We don't neet it
-           yet.
-        2. The 'Physical Drives' line.
-           It should indented after 'Internal Drive Cage' like.
-           If not ignored, we might got duplication line error.
-           After ignored, it's phsycial disks will directly stored as
-           key of 'Internal Drive Cage' dictionary.
+    Workflow:
+    0. Check out top and the second indention level's space count.
+    1. Check current line and next line to determine whether current line is
+       a start of new section.
+    2. Skip all un-required sections and their data and sub-sections.
+    3. If current line is the start of new section, create an empty dictionary
+       where following subsections or data could be stored in.
     """
+    required_sections = ['Array:', 'unassigned', 'HBA Drives', 'array']
+
     output_lines = [
         l for l in output.split("\n")
-        if l and not l.startswith('Note:') and
-        not l.strip() == 'Physical Drives']
+        if l and not l.startswith('Note:')]
+
+    _fix_mirror_group_lines(output_lines)
 
     data = {}
 
-    # Detemine indention level
-    top_indention_level = sorted(
+    # Determine indention level
+    (top_indention_level, second_indention_level) = sorted(
         set(
             len(line) - len(line.lstrip())
-            for line in output_lines))[0]
+            for line in output_lines))[0:2]
 
     indent_2_data = {
         top_indention_level: data
     }
 
+    flag_required_section = False
+
     for line_num in range(len(output_lines)):
         cur_line = output_lines[line_num]
-        if cur_line.strip() == 'None attached':
-            continue
         if line_num + 1 == len(output_lines):
+            # The current line is the last line.
             nxt_line = ''
         else:
             nxt_line = output_lines[line_num + 1]
@@ -113,11 +140,28 @@ def _parse_hpssacli_output(output):
         cur_indent_count = len(cur_line) - len(cur_line.lstrip())
         nxt_indent_count = len(nxt_line) - len(nxt_line.lstrip())
 
-        cur_line_splitted = cur_line.split(": ")
+        if cur_indent_count == top_indention_level:
+            flag_required_section = True
+
+        if cur_indent_count == second_indention_level:
+            flag_required_section = False
+
+            if nxt_indent_count == cur_indent_count:
+                flag_required_section = True
+            else:
+                for required_section in required_sections:
+                    if cur_line.lstrip().startswith(required_section):
+                        flag_required_section = True
+
+        if flag_required_section is False:
+            continue
+
+        cur_line_split = cur_line.split(": ")
         cur_data_pointer = indent_2_data[cur_indent_count]
 
         if nxt_indent_count > cur_indent_count:
-            nxt_line_splitted = nxt_line.split(": ")
+            # Current line is new section title
+            nxt_line_split = nxt_line.split(": ")
             new_data = {}
 
             if cur_line.lstrip() not in cur_data_pointer:
@@ -129,11 +173,12 @@ def _parse_hpssacli_output(output):
                     "_parse_hpssacli_output(): Found duplicate line %s" %
                     cur_line)
         else:
-            if len(cur_line_splitted) == 1:
+            if len(cur_line_split) == 1:
                 cur_data_pointer[cur_line.lstrip()] = None
             else:
-                cur_data_pointer[cur_line_splitted[0].lstrip()] = \
-                    ": ".join(cur_line_splitted[1:]).strip()
+                cur_data_pointer[cur_line_split[0].lstrip()] = \
+                    ": ".join(cur_line_split[1:]).strip()
+
     return data
 
 
@@ -177,6 +222,8 @@ def _disk_type_of(hp_disk):
         return Disk.TYPE_SSD
     elif disk_interface == 'SAS':
         return Disk.TYPE_SAS
+    elif disk_interface == 'Solid State SAS':
+        return Disk.TYPE_SSD
 
     return Disk.TYPE_UNKNOWN
 
@@ -192,6 +239,20 @@ def _disk_status_of(hp_disk, flag_free):
         disk_status |= Disk.STATUS_FREE
 
     return disk_status
+
+
+def _disk_link_type_of(hp_disk):
+    disk_interface = hp_disk['Interface Type']
+    if disk_interface == 'SATA':
+        return Disk.LINK_TYPE_ATA
+    elif disk_interface == 'Solid State SATA':
+        return Disk.LINK_TYPE_ATA
+    elif disk_interface == 'SAS':
+        return Disk.LINK_TYPE_SAS
+    elif disk_interface == 'Solid State SAS':
+        return Disk.LINK_TYPE_SAS
+
+    return Disk.LINK_TYPE_UNKNOWN
 
 
 _HP_RAID_LEVEL_CONV = {
@@ -234,6 +295,28 @@ def _lsm_raid_type_to_hp(raid_type):
         raise LsmError(
             ErrorNumber.NO_SUPPORT,
             "Not supported raid type %d" % raid_type)
+
+
+_BATTERY_STATUS_CONV = {
+    "Recharging": Battery.STATUS_CHARGING,
+    "Failed (Replace Batteries/Capacitors)": Battery.STATUS_ERROR,
+    "OK": Battery.STATUS_OK,
+}
+
+
+def _hp_battery_status_to_lsm(ctrl_data):
+    try:
+        return _BATTERY_STATUS_CONV[ctrl_data["Battery/Capacitor Status"]]
+    except KeyError:
+        return Battery.STATUS_UNKNOWN
+
+
+def _sys_id_of_ctrl_data(ctrl_data):
+    try:
+        return ctrl_data['Serial Number']
+    except KeyError:
+        # Dynamic Smart Array does not expose a serial number
+        return ctrl_data['Host Serial Number']
 
 
 class SmartArray(IPlugin):
@@ -306,13 +389,35 @@ class SmartArray(IPlugin):
         cap.set(Capabilities.VOLUME_RAID_INFO)
         cap.set(Capabilities.POOL_MEMBER_INFO)
         cap.set(Capabilities.VOLUME_RAID_CREATE)
+        cap.set(Capabilities.VOLUME_DELETE)
+        cap.set(Capabilities.VOLUME_ENABLE)
+        cap.set(Capabilities.SYS_FW_VERSION_GET)
+        cap.set(Capabilities.SYS_MODE_GET)
+        cap.set(Capabilities.SYS_READ_CACHE_PCT_UPDATE)
+        cap.set(Capabilities.SYS_READ_CACHE_PCT_GET)
+        cap.set(Capabilities.DISK_LOCATION)
+        cap.set(Capabilities.VOLUME_LED)
+        cap.set(Capabilities.BATTERIES)
+        cap.set(Capabilities.VOLUME_CACHE_INFO)
+        cap.set(Capabilities.VOLUME_PHYSICAL_DISK_CACHE_UPDATE)
+        cap.set(Capabilities.VOLUME_PHYSICAL_DISK_CACHE_UPDATE_SYSTEM_LEVEL)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_BACK)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_AUTO)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_THROUGH)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_WB_IMPACT_OTHER)
+        cap.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_IMPACT_READ)
+        cap.set(Capabilities.VOLUME_READ_CACHE_POLICY_UPDATE)
+        cap.set(Capabilities.VOLUME_READ_CACHE_POLICY_UPDATE_IMPACT_WRITE)
+
         return cap
 
-    def _sacli_exec(self, sacli_cmds, flag_convert=True):
+    def _sacli_exec(self, sacli_cmds, flag_convert=True, flag_force=False):
         """
         If flag_convert is True, convert data into dict.
         """
         sacli_cmds.insert(0, self._sacli_bin)
+        if flag_force:
+            sacli_cmds.append('forced')
         try:
             output = cmd_exec(sacli_cmds)
         except OSError as os_error:
@@ -344,15 +449,76 @@ class SmartArray(IPlugin):
 
         for ctrl_name in ctrl_all_show.keys():
             ctrl_data = ctrl_all_show[ctrl_name]
-            sys_id = ctrl_data['Serial Number']
+            sys_id = _sys_id_of_ctrl_data(ctrl_data)
             (status, status_info) = _sys_status_of(ctrl_all_status[ctrl_name])
 
             plugin_data = "%s" % ctrl_data['Slot']
+            try:
+                fw_ver = "%s" % ctrl_data['Firmware Version']
+            except KeyError:
+                # Dynamic Smart Array does not expose a firmware version
+                fw_ver = "%s" % ctrl_data['RAID Stack Version']
+            if 'Cache Ratio' in ctrl_data:
+                cache_pct = re.findall(r'\d+', ctrl_data['Cache Ratio'])
+                read_cache_pct = int(cache_pct[0])
+            elif 'Accelerator Ratio' in ctrl_data:
+                cache_pct = re.findall(r'\d+', ctrl_data['Accelerator Ratio'])
+                read_cache_pct = int(cache_pct[0])
+            else:
+                # Some Smart Arrays don't have cache
+                # This entry is also missing until a volume uses cache
+                read_cache_pct = System.CACHE_PCT_UNKNOWN
+            if 'Controller Mode' in ctrl_data:
+                hwraid_mode = ctrl_data['Controller Mode']
+                if hwraid_mode == 'RAID':
+                    mode = System.MODE_HARDWARE_RAID
+                elif hwraid_mode == 'HBA':
+                    mode = System.MODE_HBA
+                else:
+                    raise LsmError(
+                        ErrorNumber.PLUGIN_BUG,
+                        "Invalid Controller Mode: '%s'" % hwraid_mode)
+            else:
+                # prior to late Gen8, all Smart Arrays were RAID mode only
+                mode = System.MODE_HARDWARE_RAID
 
-            rc_lsm_syss.append(
-                System(sys_id, ctrl_name, status, status_info, plugin_data))
+            rc_lsm_syss.append(System(sys_id, ctrl_name, status, status_info,
+                                      plugin_data, _fw_version=fw_ver,
+                                      _mode=mode,
+                                      _read_cache_pct=read_cache_pct))
 
         return rc_lsm_syss
+
+    @_handle_errors
+    def system_read_cache_pct_update(self, system, read_pct,
+                                     flags=Client.FLAG_RSVD):
+        """
+        Depends on command:
+            hpssacli ctrl slot=# modify cacheratio=read_pct/100-read_pct
+        """
+        if not system.plugin_data:
+            raise LsmError(
+                ErrorNumber.INVALID_ARGUMENT,
+                "Illegal input system argument: missing plugin_data property")
+
+        slot_num = system.plugin_data
+
+        if (read_pct < 0 or read_pct > 100):
+            raise LsmError(
+                ErrorNumber.INVALID_ARGUMENT,
+                "Illegal input read_pct: Percentage is invalid")
+
+        try:
+            self._sacli_exec(
+                ["ctrl", "slot=%s" % slot_num, "modify",
+                 "cacheratio=%s/%s" % (read_pct, 100-read_pct)],
+                flag_convert=False)
+        except ExecError:
+            raise LsmError(
+                ErrorNumber.PLUGIN_BUG,
+                "system_read_cache_pct_update failed unexpectedly,"
+                " the system either does not support this operation"
+                " or no volumes have been configured to use system cache")
 
     @staticmethod
     def _hp_array_to_lsm_pool(hp_array, array_name, sys_id, ctrl_num):
@@ -388,7 +554,7 @@ class SmartArray(IPlugin):
         ctrl_all_conf = self._sacli_exec(
             ["ctrl", "all", "show", "config", "detail"])
         for ctrl_data in ctrl_all_conf.values():
-            sys_id = ctrl_data['Serial Number']
+            sys_id = _sys_id_of_ctrl_data(ctrl_data)
             ctrl_num = ctrl_data['Slot']
             for key_name in ctrl_data.keys():
                 if key_name.startswith("Array:"):
@@ -401,29 +567,34 @@ class SmartArray(IPlugin):
     @staticmethod
     def _hp_ld_to_lsm_vol(hp_ld, pool_id, sys_id, ctrl_num, array_num,
                           hp_ld_name):
+        """
+        raises DeviceNotFoundError
+        """
         ld_num = hp_ld_name[len("Logical Drive: "):]
         vpd83 = hp_ld['Unique Identifier'].lower()
         # No document or command output indicate block size
         # of volume. So we try to read from linux kernel, if failed
         # try 512 and roughly calculate the sector count.
-        regex_match = re.compile("/dev/(sd[a-z]+)").search(hp_ld['Disk Name'])
-        vol_name = hp_ld_name
-        if regex_match:
-            sd_name = regex_match.group(1)
-            block_size = int(file_read(
-                "/sys/block/%s/queue/logical_block_size" % sd_name))
-            num_of_blocks = int(file_read("/sys/block/%s/size" % sd_name))
-            vol_name += ": /dev/%s" % sd_name
-        else:
+        device = Device.from_device_file(_CONTEXT, hp_ld['Disk Name'])
+        vol_name = "%s: /dev/%s" % (hp_ld_name, device.sys_name)
+        attributes = device.attributes
+        try:
+            block_size = attributes.asint("queue/logical_block_size")
+            num_of_blocks = attributes.asint("size")
+        except (KeyError, UnicodeDecodeError, ValueError):
             block_size = 512
             num_of_blocks = int(_hp_size_to_lsm(hp_ld['Size']) / block_size)
 
+        if 'Failed' in hp_ld['Status']:
+            admin_status = Volume.ADMIN_STATE_DISABLED
+        else:
+            admin_status = Volume.ADMIN_STATE_ENABLED
         plugin_data = "%s:%s:%s" % (ctrl_num, array_num, ld_num)
 
         # HP SmartArray does not allow disabling volume.
         return Volume(
             vpd83, vol_name, vpd83, block_size, num_of_blocks,
-            Volume.ADMIN_STATE_ENABLED, sys_id, pool_id, plugin_data)
+            admin_status, sys_id, pool_id, plugin_data)
 
     @_handle_errors
     def volumes(self, search_key=None, search_value=None,
@@ -437,7 +608,7 @@ class SmartArray(IPlugin):
             ["ctrl", "all", "show", "config", "detail"])
         for ctrl_data in ctrl_all_conf.values():
             ctrl_num = ctrl_data['Slot']
-            sys_id = ctrl_data['Serial Number']
+            sys_id = _sys_id_of_ctrl_data(ctrl_data)
             for key_name in ctrl_data.keys():
                 if not key_name.startswith("Array:"):
                     continue
@@ -446,11 +617,16 @@ class SmartArray(IPlugin):
                 for array_key_name in ctrl_data[key_name].keys():
                     if not array_key_name.startswith("Logical Drive"):
                         continue
-                    lsm_vols.append(
-                        SmartArray._hp_ld_to_lsm_vol(
-                            ctrl_data[key_name][array_key_name],
-                            pool_id, sys_id, ctrl_num, array_num,
-                            array_key_name))
+
+                    try:
+                        lsm_vol = SmartArray._hp_ld_to_lsm_vol(
+                           ctrl_data[key_name][array_key_name],
+                           pool_id, sys_id, ctrl_num, array_num,
+                           array_key_name)
+                    except DeviceNotFoundError:
+                        pass
+                    else:
+                        lsm_vols.append(lsm_vol)
 
         return search_property(lsm_vols, search_key, search_value)
 
@@ -463,12 +639,25 @@ class SmartArray(IPlugin):
         disk_type = _disk_type_of(hp_disk)
         blk_size = int(hp_disk['Native Block Size'])
         blk_count = int(_hp_size_to_lsm(hp_disk['Size']) / blk_size)
+        disk_port, disk_box, disk_bay = disk_num.split(":")
+        disk_location = "Port: %s Box: %s Bay: %s" % (
+            disk_port, disk_box, disk_bay)
+
         status = _disk_status_of(hp_disk, flag_free)
         plugin_data = "%s:%s" % (ctrl_num, disk_num)
+        disk_path = hp_disk.get('Disk Name')
+        if disk_path:
+            vpd83 = LocalDisk.vpd83_get(disk_path)
+        else:
+            vpd83 = ''
+        rpm = int(hp_disk.get('Rotational Speed',
+                              Disk.RPM_NON_ROTATING_MEDIUM))
+        link_type = _disk_link_type_of(hp_disk)
 
         return Disk(
             disk_id, disk_name, disk_type, blk_size, blk_count,
-            status, sys_id, plugin_data)
+            status, sys_id, _plugin_data=plugin_data, _vpd83=vpd83,
+            _location=disk_location, _rpm=rpm, _link_type=link_type)
 
     @_handle_errors
     def disks(self, search_key=None, search_value=None,
@@ -482,7 +671,7 @@ class SmartArray(IPlugin):
         ctrl_all_conf = self._sacli_exec(
             ["ctrl", "all", "show", "config", "detail"])
         for ctrl_data in ctrl_all_conf.values():
-            sys_id = ctrl_data['Serial Number']
+            sys_id = _sys_id_of_ctrl_data(ctrl_data)
             ctrl_num = ctrl_data['Slot']
             for key_name in ctrl_data.keys():
                 if key_name.startswith("Array:"):
@@ -494,7 +683,7 @@ class SmartArray(IPlugin):
                                     sys_id, ctrl_num, array_key_name,
                                     flag_free=False))
 
-                if key_name == 'unassigned':
+                if key_name == 'unassigned' or key_name == 'HBA Drives':
                     for array_key_name in ctrl_data[key_name].keys():
                         if array_key_name.startswith("physicaldrive"):
                             rc_lsm_disks.append(
@@ -639,7 +828,8 @@ class SmartArray(IPlugin):
             1. Create LD
                 hpssacli ctrl slot=0 create type=ld \
                     drives=1i:1:13,1i:1:14 size=max raid=1+0 ss=64
-
+                NOTE: This now optionally appends arguments \
+                if certain Client flags are set.
             2. Find out the system ID.
 
             3. Find out the pool fist disk belong.
@@ -678,8 +868,20 @@ class SmartArray(IPlugin):
         if strip_size != Volume.VCR_STRIP_SIZE_DEFAULT:
             cmds.append("ss=%d" % int(strip_size / 1024))
 
+        if flags == Client.FLAG_VOLUME_CREATE_USE_SYSTEM_CACHE:
+            cmds.append("aa=enable")
+
+        if flags == Client.FLAG_VOLUME_CREATE_USE_IO_PASSTHROUGH:
+            cmds.append("ssdsmartpath=enable")
+
+        if flags == Client.FLAG_VOLUME_CREATE_DISABLE_SYSTEM_CACHE:
+            cmds.append("aa=disable")
+
+        if flags == Client.FLAG_VOLUME_CREATE_DISABLE_IO_PASSTHROUGH:
+            cmds.append("ssdsmartpath=disable")
+
         try:
-            self._sacli_exec(cmds, flag_convert=False)
+            self._sacli_exec(cmds, flag_convert=False, flag_force=True)
         except ExecError:
             # Check whether disk is free
             requested_disk_ids = [d.id for d in disks]
@@ -711,7 +913,7 @@ class SmartArray(IPlugin):
         sys_output = self._sacli_exec(
             ['ctrl', "slot=%s" % ctrl_num, 'show'])
 
-        sys_id = sys_output.values()[0]['Serial Number']
+        sys_id = _sys_id_of_ctrl_data(sys_output.values()[0])
         # API code already checked empty 'disks', we will for sure get
         # valid 'ctrl_num' and 'hp_disk_ids'.
 
@@ -737,3 +939,373 @@ class SmartArray(IPlugin):
                 "volume_raid_create(): Got unexpected count(not 1) of new "
                 "volumes: %s" % lsm_vols)
         return lsm_vols[0]
+
+    @_handle_errors
+    def volume_delete(self, volume, flags=0):
+        """
+        Depends on command:
+            hpssacli ctrl slot=# ld # delete forced
+            hpssacli ctrl slot=# show config detail
+        """
+        if not volume.plugin_data:
+            raise LsmError(
+                ErrorNumber.INVALID_ARGUMENT,
+                "Illegal input volume argument: missing plugin_data property")
+
+        (ctrl_num, array_num, ld_num) = volume.plugin_data.split(":")
+
+        try:
+            self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "ld %s" % ld_num, "delete"],
+                flag_convert=False, flag_force=True)
+        except ExecError:
+            ctrl_data = self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "show", "config", "detail"]
+                ).values()[0]
+
+            for key_name in ctrl_data.keys():
+                if key_name != "Array: %s" % array_num:
+                    continue
+                for array_key_name in ctrl_data[key_name].keys():
+                    if array_key_name == "Logical Drive: %s" % ld_num:
+                        raise LsmError(
+                            ErrorNumber.PLUGIN_BUG,
+                            "volume_delete failed unexpectedly")
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+
+        return None
+
+    def volume_enable(self, volume, flags=Client.FLAG_RSVD):
+        """
+        Depend on command:
+            hpssacli ctrl slot=# ld # modify reenable forced
+            hpssacli ctrl slot=# show config detail
+        """
+        if not volume.plugin_data:
+            raise LsmError(
+                ErrorNumber.INVALID_ARGUMENT,
+                "Illegal input volume argument: missing plugin_data property")
+
+        (ctrl_num, array_num, ld_num) = volume.plugin_data.split(":")
+
+        try:
+            self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "ld %s" % ld_num, "modify",
+                 "reenable"], flag_convert=False, flag_force=True)
+        except ExecError:
+            ctrl_data = self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "show", "config", "detail"]
+                ).values()[0]
+
+            for key_name in ctrl_data.keys():
+                if key_name != "Array: %s" % array_num:
+                    continue
+                for array_key_name in ctrl_data[key_name].keys():
+                    if array_key_name == "Logical Drive: %s" % ld_num:
+                        raise LsmError(
+                            ErrorNumber.PLUGIN_BUG,
+                            "volume_enable failed unexpectedly")
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+
+        return None
+
+    @_handle_errors
+    def volume_ident_led_on(self, volume, flags=Client.FLAG_RSVD):
+        """
+        Depend on command:
+            hpssacli ctrl slot=# ld # modify led=on
+            hpssacli ctrl slot=# show config detail
+        """
+        if not volume.plugin_data:
+            raise LsmError(
+                ErrorNumber.INVALID_ARGUMENT,
+                "Ilegal input volume argument: missing plugin_data property")
+
+        (ctrl_num, array_num, ld_num) = volume.plugin_data.split(":")
+
+        try:
+            self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "ld %s" % ld_num, "modify",
+                 "led=on"], flag_convert=False)
+        except ExecError:
+            ctrl_data = self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "show", "config", "detail"]
+                ).values()[0]
+
+            for key_name in ctrl_data.keys():
+                if key_name != "Array: %s" % array_num:
+                    continue
+                for array_key_name in ctrl_data[key_name].keys():
+                    if array_key_name == "Logical Drive: %s" % ld_num:
+                        raise LsmError(
+                            ErrorNumber.PLUGIN_BUG,
+                            "volume_ident_led_on failed unexpectedly")
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+
+        return None
+
+    @_handle_errors
+    def volume_ident_led_off(self, volume, flags=Client.FLAG_RSVD):
+        """
+        Depend on command:
+            hpssacli ctrl slot=# ld # modify led=off
+            hpssacli ctrl slot=# show config detail
+        """
+        if not volume.plugin_data:
+            raise LsmError(
+                ErrorNumber.INVALID_ARGUMENT,
+                "Ilegal input volume argument: missing plugin_data property")
+
+        (ctrl_num, array_num, ld_num) = volume.plugin_data.split(":")
+
+        try:
+            self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "ld %s" % ld_num, "modify",
+                 "led=off"], flag_convert=False)
+        except ExecError:
+            ctrl_data = self._sacli_exec(
+                ["ctrl", "slot=%s" % ctrl_num, "show", "config", "detail"]
+                ).values()[0]
+
+            for key_name in ctrl_data.keys():
+                if key_name != "Array: %s" % array_num:
+                    continue
+                for array_key_name in ctrl_data[key_name].keys():
+                    if array_key_name == "Logical Drive: %s" % ld_num:
+                        raise LsmError(
+                            ErrorNumber.PLUGIN_BUG,
+                            "volume_ident_led_off failed unexpectedly")
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+
+        return None
+
+    @_handle_errors
+    def batteries(self, search_key=None, search_value=None,
+                  flags=Client.FLAG_RSVD):
+        lsm_bs = []
+        ctrl_all_show = self._sacli_exec(
+            ["ctrl", "all", "show", "config", "detail"])
+
+        for ctrl_name in ctrl_all_show.keys():
+            ctrl_data = ctrl_all_show[ctrl_name]
+            bat_count = int(ctrl_data.get('Battery/Capacitor Count', 0))
+            if bat_count == 0:
+                continue
+
+            sys_id = _sys_id_of_ctrl_data(ctrl_data)
+
+            battery_status = _hp_battery_status_to_lsm(ctrl_data)
+
+            if ctrl_data["Cache Backup Power Source"] == "Capacitors":
+                battery_type = Battery.TYPE_CAPACITOR
+            elif ctrl_data["Cache Backup Power Source"] == "Batteries":
+                battery_type = Battery.TYPE_CHEMICAL
+            else:
+                battery_type = Battery.TYPE_UNKNOWN
+
+            for counter in range(0, bat_count):
+                lsm_bs.append(
+                    Battery(
+                        "%s_BAT_%d" % (sys_id, counter),
+                        "Battery %d of %s" % (counter, ctrl_name),
+                        battery_type, battery_status, sys_id,
+                        _plugin_data=None))
+
+        return search_property(lsm_bs, search_key, search_value)
+
+    def _cal_of_lsm_vol(self, lsm_vol):
+        """
+        Retrieve controller slot number, array number, logical disk number
+        of given volume. Also validate the existence.
+        Return (ctrl_num, array_num, ld_num)
+        """
+        try:
+            new_lsm_vol = \
+                self.volumes(search_key='id', search_value=lsm_vol.id)[0]
+        except IndexError:
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_VOLUME,
+                "Volume not found")
+
+        return new_lsm_vol.plugin_data.split(":")
+
+    @_handle_errors
+    def volume_cache_info(self, volume, flags=Client.FLAG_RSVD):
+        """
+        Depend on command:
+            hpssacli ctrl slot=0 show config detail
+        """
+        flag_battery_ok = False
+        flag_ram_ok = False
+
+        (ctrl_num, array_num, ld_num) = self._cal_of_lsm_vol(volume)
+        ctrl_data = self._sacli_exec(
+            ["ctrl", "slot=%s" % ctrl_num, "show", "config", "detail"]
+            ).values()[0]
+
+        lsm_bats = self.batteries()
+        for lsm_bat in lsm_bats:
+            if lsm_bat.status == Battery.STATUS_OK:
+                flag_battery_ok = True
+
+        if 'Total Cache Size' in ctrl_data and \
+           _hp_size_to_lsm(ctrl_data['Total Cache Size']) > 0 and \
+           ctrl_data['Cache Status'] == 'OK':
+            flag_ram_ok = True
+
+        ld_info = ctrl_data.get(
+            "Array: %s" % array_num, {}).get("Logical Drive: %s" % ld_num, {})
+
+        if not ld_info:
+            raise LsmError(ErrorNumber.NOT_FOUND_VOLUME, "Volume not found")
+
+        if ld_info['Caching'] == 'Disabled':
+            write_cache_policy = Volume.WRITE_CACHE_POLICY_WRITE_THROUGH
+            write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_THROUGH
+            read_cache_policy = Volume.READ_CACHE_POLICY_DISABLED
+            read_cache_status = Volume.READ_CACHE_STATUS_DISABLED
+        elif ld_info['Caching'] == 'Enabled':
+            read_cache_policy = Volume.READ_CACHE_POLICY_ENABLED
+            if ctrl_data.get('No-Battery Write Cache', '') == 'Enabled':
+                write_cache_policy = Volume.WRITE_CACHE_POLICY_WRITE_BACK
+                if flag_ram_ok:
+                    write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_BACK
+                    read_cache_status = Volume.READ_CACHE_STATUS_ENABLED
+                else:
+                    write_cache_status = \
+                        Volume.WRITE_CACHE_STATUS_WRITE_THROUGH
+                    read_cache_status = Volume.READ_CACHE_STATUS_DISABLED
+            else:
+                write_cache_policy = Volume.WRITE_CACHE_POLICY_AUTO
+                if flag_ram_ok:
+                    read_cache_status = Volume.READ_CACHE_STATUS_ENABLED
+                    if flag_battery_ok:
+                        write_cache_status = \
+                            Volume.WRITE_CACHE_STATUS_WRITE_BACK
+                    else:
+                        write_cache_status = \
+                            Volume.WRITE_CACHE_POLICY_WRITE_THROUGH
+                else:
+                    read_cache_status = Volume.READ_CACHE_STATUS_DISABLED
+                    write_cache_status = \
+                        Volume.WRITE_CACHE_STATUS_WRITE_THROUGH
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Unknown 'Caching' property of logical volume %d" %
+                           ld_num)
+
+        if ctrl_data['Drive Write Cache'] == 'Disabled':
+            phy_disk_cache = Volume.PHYSICAL_DISK_CACHE_DISABLED
+        elif ctrl_data['Drive Write Cache'] == 'Enabled':
+            phy_disk_cache = Volume.PHYSICAL_DISK_CACHE_ENABLED
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Unknown 'Drive Write Cache' property of "
+                           "logical volume %d" % ld_num)
+
+        return [write_cache_policy, write_cache_status, read_cache_policy,
+                read_cache_status, phy_disk_cache]
+
+    def _is_ssd_volume(self, volume):
+        ssd_disk_ids = list(d.id for d in self.disks()
+                            if d.disk_type == Disk.TYPE_SSD)
+        pool = self.pools(search_key='id', search_value=volume.pool_id)[0]
+        disk_ids = self.pool_member_info(pool)[2]
+        return len(set(disk_ids) & set(ssd_disk_ids)) != 0
+
+    @_handle_errors
+    def volume_physical_disk_cache_update(self, volume, pdc,
+                                          flags=Client.FLAG_RSVD):
+        """
+        Depending on "hpssacli ctrl slot=3 modify dwc=<disable|enable>"
+        command.
+        This will change all volumes' setting on physical disk cache.
+        """
+        ctrl_num = self._cal_of_lsm_vol(volume)[0]
+
+        cmd = ["ctrl", "slot=%s" % ctrl_num, "modify"]
+
+        if pdc == Volume.PHYSICAL_DISK_CACHE_ENABLED:
+            cmd.append("dwc=enable")
+        elif pdc == Volume.PHYSICAL_DISK_CACHE_DISABLED:
+            cmd.append("dwc=disable")
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Got unknown pdc: %d" % pdc)
+        self._sacli_exec(cmd, flag_force=True, flag_convert=False)
+
+    @_handle_errors
+    def volume_write_cache_policy_update(self, volume, wcp,
+                                         flags=Client.FLAG_RSVD):
+        """
+        Depending on these commands:
+            To disable both read and write cache:
+                hpssacli ctrl slot=3 ld 1 modify aa=disable
+            To enable no battery write cache:
+                hpssacli ctrl slot=0 modify nbwc=enable
+        """
+        (ctrl_num, array_num, ld_num) = self._cal_of_lsm_vol(volume)
+
+        cmd1 = ['ctrl', 'slot=%s' % ctrl_num, 'ld', ld_num]
+        cmd2 = []
+        if wcp == Volume.WRITE_CACHE_POLICY_WRITE_BACK:
+            cmd1.extend(['modify', 'aa=enable'])
+            cmd2 = ['ctrl', 'slot=%s' % ctrl_num, 'modify', 'nbwc=enable']
+        elif wcp == Volume.WRITE_CACHE_POLICY_AUTO:
+            cmd1.extend(['modify', 'aa=enable'])
+            cmd2 = ['ctrl', 'slot=%s' % ctrl_num, 'modify', 'nbwc=disable']
+        elif wcp == Volume.WRITE_CACHE_POLICY_WRITE_THROUGH:
+            cmd1.extend(['modify', 'aa=disable'])
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Got unknown wcp: %d" % wcp)
+
+        try:
+            self._sacli_exec(cmd1, flag_force=True, flag_convert=False)
+            if cmd2:
+                self._sacli_exec(cmd2, flag_force=True, flag_convert=False)
+        except ExecError as exec_error:
+            # Check whether we got SSD volume
+            if self._is_ssd_volume(volume):
+                raise LsmError(
+                    ErrorNumber.NO_SUPPORT,
+                    "HP SmartArray does not allow changing SSD volume's "
+                    "cache policy while SmartPath is enabled")
+            raise exec_error
+
+    @_handle_errors
+    def volume_read_cache_policy_update(self, volume, rcp,
+                                        flags=Client.FLAG_RSVD):
+        """
+        Depending on this command:
+            To disable both read and write cache:
+                hpssacli ctrl slot=3 ld 1 modify aa=disable
+        """
+        (ctrl_num, array_num, ld_num) = self._cal_of_lsm_vol(volume)
+
+        cmd = ['ctrl', 'slot=%s' % ctrl_num, 'ld', ld_num, 'modify']
+        if rcp == Volume.READ_CACHE_POLICY_DISABLED:
+            cmd.append('aa=disable')
+        elif rcp == Volume.READ_CACHE_POLICY_ENABLED:
+            cmd.append('aa=enable')
+        else:
+            raise LsmError(ErrorNumber.PLUGIN_BUG,
+                           "Got unknown rcp: %d" % rcp)
+        try:
+            self._sacli_exec(cmd, flag_force=True, flag_convert=False)
+        except ExecError as exec_error:
+            # Check whether we got SSD volume
+            if self._is_ssd_volume(volume):
+                raise LsmError(
+                    ErrorNumber.NO_SUPPORT,
+                    "HP SmartArray does not allow changing SSD volume's "
+                    "cache policy while SmartPath is enabled")
+            raise exec_error

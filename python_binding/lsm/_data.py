@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2014 Red Hat, Inc.
+# Copyright (C) 2011-2016 Red Hat, Inc.
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -103,8 +103,8 @@ class IData(object):
         """
         rc = {'class': self.__class__.__name__}
 
-        #If one of the attributes is another IData we will
-        #process that too, is there a better way to handle this?
+        # If one of the attributes is another IData we will
+        # process that too, is there a better way to handle this?
         for (k, v) in self.__dict__.items():
             if isinstance(v, IData):
                 rc[k[1:]] = v._to_dict()
@@ -124,7 +124,7 @@ class IData(object):
             del d['class']
             c = get_class(__name__ + '.' + class_name)
 
-            #If any of the parameters are themselves an IData process them
+            # If any of the parameters are themselves an IData process them
             for k, v in d.items():
                 if isinstance(v, dict) and 'class' in v:
                     d['_' + k] = IData._factory(d.pop(k))
@@ -207,8 +207,29 @@ class Disk(IData):
     # any explicit action when assigning to pool, it should be treated as
     # free disk and marked as STATUS_FREE|STATUS_SPARE_DISK.
 
+    RPM_NO_SUPPORT = -2
+    RPM_UNKNOWN = -1
+    RPM_NON_ROTATING_MEDIUM = 0
+    RPM_ROTATING_UNKNOWN_SPEED = 1
+
+    LINK_TYPE_NO_SUPPORT = -2
+    LINK_TYPE_UNKNOWN = -1
+    LINK_TYPE_FC = 0
+    LINK_TYPE_SSA = 2
+    LINK_TYPE_SBP = 3
+    LINK_TYPE_SRP = 4
+    LINK_TYPE_ISCSI = 5
+    LINK_TYPE_SAS = 6
+    LINK_TYPE_ADT = 7
+    LINK_TYPE_ATA = 8
+    LINK_TYPE_USB = 9
+    LINK_TYPE_SOP = 10
+    LINK_TYPE_PCIE = 11
+
     def __init__(self, _id, _name, _disk_type, _block_size, _num_of_blocks,
-                 _status, _system_id, _plugin_data=None):
+                 _status, _system_id, _plugin_data=None, _vpd83='',
+                 _location='', _rpm=RPM_NO_SUPPORT,
+                 _link_type=LINK_TYPE_NO_SUPPORT):
         self._id = _id
         self._name = _name
         self._disk_type = _disk_type
@@ -217,6 +238,15 @@ class Disk(IData):
         self._status = _status
         self._system_id = _system_id
         self._plugin_data = _plugin_data
+        if _vpd83 and not Volume.vpd83_verify(_vpd83):
+            raise LsmError(ErrorNumber.INVALID_ARGUMENT,
+                           "Incorrect format of VPD 0x83 NAA(3) string: '%s', "
+                           "expecting 32 or 16 lower case hex characters" %
+                           _vpd83)
+        self._vpd83 = _vpd83
+        self._location = _location
+        self._rpm = _rpm
+        self._link_type = _link_type
 
     @property
     def size_bytes(self):
@@ -224,6 +254,88 @@ class Disk(IData):
         Disk size in bytes.
         """
         return self.block_size * self.num_of_blocks
+
+    @property
+    def vpd83(self):
+        """
+        String. SCSI VPD83 ID. New in version 1.3.
+        Only available for DAS(direct attached storage) systems.
+        The VPD83 ID could be used in 'lsm.SCSI.disk_paths_of_vpd83()'
+        when physical disk is exposed to OS directly.
+        """
+        if self._vpd83 == '':
+            raise LsmError(
+                ErrorNumber.NO_SUPPORT,
+                "Disk.vpd83 is not supported by current disk or plugin")
+
+        return self._vpd83
+
+    @property
+    def location(self):
+        """
+        String. Disk location in storage topology. New in version 1.3.
+        """
+        if self._location == '':
+            raise LsmError(ErrorNumber.NO_SUPPORT,
+                           "Disk.location property is not supported by this "
+                           "plugin yet")
+        return self._location
+
+    @property
+    def rpm(self):
+        """
+        Integer. New in version 1.3.
+        Disk rotation speed - revolutions per minute(RPM):
+            -1 (LSM_DISK_RPM_UNKNOWN):
+                Unknown RPM
+             0 (LSM_DISK_RPM_NON_ROTATING_MEDIUM):
+                Non-rotating medium (e.g., SSD)
+             1 (LSM_DISK_RPM_ROTATING_UNKNOWN_SPEED):
+                Rotational disk with unknown speed
+            >1:
+                Normal rotational disk (e.g., HDD)
+        """
+        if self._rpm == Disk.RPM_NO_SUPPORT:
+            raise LsmError(ErrorNumber.NO_SUPPORT,
+                           "Disk.rpm is not supported by this plugin yet")
+        return self._rpm
+
+    @property
+    def link_type(self):
+        """
+        Integer. New in version 1.3.
+        Link type, possible values are:
+            lsm.Disk.LINK_TYPE_UNKNOWN
+                Failed to detect link type
+            lsm.Disk.LINK_TYPE_FC
+                Fibre Channel
+            lsm.Disk.LINK_TYPE_SSA
+                Serial Storage Architecture, Old IBM tech.
+            lsm.Disk.LINK_TYPE_SBP
+                Serial Bus Protocol, used by IEEE 1394.
+            lsm.Disk.LINK_TYPE_SRP
+                SCSI RDMA Protocol
+            lsm.Disk.LINK_TYPE_ISCSI
+                Internet Small Computer System Interface
+            lsm.Disk.LINK_TYPE_SAS
+                Serial Attached SCSI
+            lsm.Disk.LINK_TYPE_ADT
+                Automation/Drive Interface Transport
+                Protocol, often used by Tape.
+            lsm.Disk.LINK_TYPE_ATA
+                PATA/IDE or SATA.
+            lsm.Disk.LINK_TYPE_USB
+                USB disk.
+            lsm.Disk.LINK_TYPE_SOP
+                SCSI over PCI-E
+            lsm.Disk.LINK_TYPE_PCIE
+                PCI-E, e.g. NVMe
+        """
+        if self._link_type == Disk.LINK_TYPE_NO_SUPPORT:
+            raise LsmError(ErrorNumber.NO_SUPPORT,
+                           "Disk.link_type is not supported by this plugin "
+                           "yet")
+        return self._link_type
 
     def __str__(self):
         return self.name
@@ -249,14 +361,14 @@ class Volume(IData):
     """
     SUPPORTED_SEARCH_KEYS = ['id', 'system_id', 'pool_id']
 
-    #Replication types
+    # Replication types
     REPLICATE_UNKNOWN = -1
     REPLICATE_CLONE = 2
     REPLICATE_COPY = 3
     REPLICATE_MIRROR_SYNC = 4
     REPLICATE_MIRROR_ASYNC = 5
 
-    #Provisioning types
+    # Provisioning types
     PROVISION_UNKNOWN = -1
     PROVISION_THIN = 1
     PROVISION_FULL = 2
@@ -306,6 +418,28 @@ class Volume(IData):
     OPT_IO_SIZE_UNKNOWN = 0
 
     VCR_STRIP_SIZE_DEFAULT = 0
+
+    WRITE_CACHE_POLICY_UNKNOWN = 1
+    WRITE_CACHE_POLICY_WRITE_BACK = 2
+    WRITE_CACHE_POLICY_AUTO = 3
+    WRITE_CACHE_POLICY_WRITE_THROUGH = 4
+
+    WRITE_CACHE_STATUS_UNKNOWN = 1
+    WRITE_CACHE_STATUS_WRITE_BACK = 2
+    WRITE_CACHE_STATUS_WRITE_THROUGH = 3
+
+    READ_CACHE_POLICY_UNKNOWN = 1
+    READ_CACHE_POLICY_ENABLED = 2
+    READ_CACHE_POLICY_DISABLED = 3
+
+    READ_CACHE_STATUS_UNKNOWN = 1
+    READ_CACHE_STATUS_ENABLED = 2
+    READ_CACHE_STATUS_DISABLED = 3
+
+    PHYSICAL_DISK_CACHE_UNKNOWN = 1
+    PHYSICAL_DISK_CACHE_ENABLED = 2
+    PHYSICAL_DISK_CACHE_DISABLED = 3
+    PHYSICAL_DISK_CACHE_USE_DISK_SETTING = 4
 
     def __init__(self, _id, _name, _vpd83, _block_size, _num_of_blocks,
                  _admin_state, _system_id, _pool_id, _plugin_data=None):
@@ -357,12 +491,78 @@ class System(IData):
     STATUS_PREDICTIVE_FAILURE = 1 << 4
     STATUS_OTHER = 1 << 5
 
-    def __init__(self, _id, _name, _status, _status_info, _plugin_data=None):
+    MODE_NO_SUPPORT = -2
+    MODE_UNKNOWN = -1
+    MODE_HARDWARE_RAID = 0
+    MODE_HBA = 1
+
+    READ_CACHE_PCT_NO_SUPPORT = -2
+    READ_CACHE_PCT_UNKNOWN = -1
+
+    def __init__(self, _id, _name, _status, _status_info, _plugin_data=None,
+                 _fw_version='', _mode=None, _read_cache_pct=None):
         self._id = _id
         self._name = _name
         self._status = _status
         self._status_info = _status_info
         self._plugin_data = _plugin_data
+        self._fw_version = _fw_version
+        if _read_cache_pct is None:
+            self._read_cache_pct = System.READ_CACHE_PCT_NO_SUPPORT
+        else:
+            self._read_cache_pct = _read_cache_pct
+        if _mode is None:
+            self._mode = System.MODE_NO_SUPPORT
+        else:
+            self._mode = _mode
+
+    @property
+    def fw_version(self):
+        """
+        String. Firmware version string. New in version 1.3.
+        On some system, it might contain multiple version strings, example:
+            "Package: 23.32.0-0009, FW: 3.440.05-3712"
+        """
+        if self._fw_version == '':
+            raise LsmError(ErrorNumber.NO_SUPPORT,
+                           "System.fw_version() is not supported by this "
+                           "plugin yet")
+        return self._fw_version
+
+    @property
+    def mode(self):
+        """
+        Integer(enumerated value). System mode. New in version 1.3.
+        Only available for HW RAID systems at this time.
+        Possible values:
+            * lsm.System.MODE_HARDWARE_RAID
+                The logical volume(aka, RAIDed virtual disk) can be exposed
+                to OS  while hardware RAID card is handling the RAID
+                algorithm. Physical disk can not be exposed to OS directly.
+
+            * lsm.System.MODE_HBA
+                The physical disks can be exposed to OS directly.
+                SCSI enclosure service might be exposed to OS also.
+        """
+        if self._mode == System.MODE_NO_SUPPORT:
+            raise LsmError(ErrorNumber.NO_SUPPORT,
+                           "System.mode is not supported by this plugin yet")
+        return self._mode
+
+    @property
+    def read_cache_pct(self):
+        """
+        Integer. Read cache percentage. New in version 1.3.
+        Possible values:
+            * 0-100
+                The read cache percentage. The write cache percentage will
+                then be 100 - read_cache_pct
+        """
+        if self._read_cache_pct == System.READ_CACHE_PCT_NO_SUPPORT:
+            raise LsmError(ErrorNumber.NO_SUPPORT,
+                           "System.read_cache_pct is not supported by this "
+                           "plugin yet")
+        return self._read_cache_pct
 
 
 @default_property('id', doc="Unique identifier")
@@ -424,8 +624,8 @@ class Pool(IData):
         self._id = _id                      # Identifier
         self._name = _name                  # Human recognisable name
         self._element_type = _element_type  # What pool can be used to create
-        self._unsupported_actions = _unsupported_actions  # What pool cannot be
-                                            # used for
+        self._unsupported_actions = _unsupported_actions
+        # What pool cannot be used for
         self._total_space = _total_space    # Total size
         self._free_space = _free_space      # Free space available
         self._status = _status              # Status of pool.
@@ -440,7 +640,7 @@ class Pool(IData):
 @default_property('free_space', doc="Free space available")
 @default_property('pool_id', doc="What pool the file system resides on")
 @default_property('system_id', doc="System ID")
-@default_property("plugin_data", "Private plugin data")
+@default_property("plugin_data", doc="Private plugin data")
 class FileSystem(IData):
     SUPPORTED_SEARCH_KEYS = ['id', 'system_id', 'pool_id']
 
@@ -458,7 +658,7 @@ class FileSystem(IData):
 @default_property('id', doc="Unique identifier")
 @default_property('name', doc="Snapshot name")
 @default_property('ts', doc="Time stamp the snapshot was created")
-@default_property("plugin_data", "Private plugin data")
+@default_property("plugin_data", doc="Private plugin data")
 class FsSnapshot(IData):
 
     def __init__(self, _id, _name, _ts, _plugin_data=None):
@@ -532,7 +732,7 @@ class AccessGroup(IData):
         self._id = _id
         self._name = _name                # AccessGroup name
         self._init_ids = AccessGroup._standardize_init_list(_init_ids)
-                                          # A list of Initiator ID strings.
+        # A list of Initiator ID strings.
         self._init_type = _init_type
         self._system_id = _system_id      # System id this group belongs
         self._plugin_data = _plugin_data
@@ -681,7 +881,7 @@ class Capabilities(IData):
 
     _CAP_NUM_BEGIN = 20     # Indicate the first capability integer
 
-    #Block operations
+    # Block operations
     VOLUMES = 20
     VOLUME_CREATE = 21
     VOLUME_RESIZE = 22
@@ -727,7 +927,20 @@ class Capabilities(IData):
 
     VOLUME_THIN = 55
 
-    #File system
+    BATTERIES = 56
+
+    VOLUME_CACHE_INFO = 57
+    VOLUME_PHYSICAL_DISK_CACHE_UPDATE = 58
+    VOLUME_PHYSICAL_DISK_CACHE_UPDATE_SYSTEM_LEVEL = 59
+    VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_BACK = 60
+    VOLUME_WRITE_CACHE_POLICY_UPDATE_AUTO = 61
+    VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_THROUGH = 62
+    VOLUME_WRITE_CACHE_POLICY_UPDATE_IMPACT_READ = 63
+    VOLUME_WRITE_CACHE_POLICY_UPDATE_WB_IMPACT_OTHER = 64
+    VOLUME_READ_CACHE_POLICY_UPDATE = 65
+    VOLUME_READ_CACHE_POLICY_UPDATE_IMPACT_WRITE = 66
+
+    # File system
     FS = 100
     FS_DELETE = 101
     FS_RESIZE = 102
@@ -743,12 +956,21 @@ class Capabilities(IData):
     FS_CHILD_DEPENDENCY_RM = 113
     FS_CHILD_DEPENDENCY_RM_SPECIFIC_FILES = 114
 
-    #NFS
+    # NFS
     EXPORT_AUTH = 120
     EXPORTS = 121
     EXPORT_FS = 122
     EXPORT_REMOVE = 123
     EXPORT_CUSTOM_PATH = 124
+
+    SYS_READ_CACHE_PCT_UPDATE = 158
+    SYS_READ_CACHE_PCT_GET = 159
+    SYS_FW_VERSION_GET = 160
+    SYS_MODE_GET = 161
+    DISK_LOCATION = 163
+    DISK_RPM = 164
+    DISK_LINK_TYPE = 165
+    VOLUME_LED = 171
 
     POOLS_QUICK_SEARCH = 210
     VOLUMES_QUICK_SEARCH = 211
@@ -762,6 +984,7 @@ class Capabilities(IData):
     DISKS = 220
     POOL_MEMBER_INFO = 221
     VOLUME_RAID_CREATE = 222
+    DISK_VPD83_GET = 223
 
     def _to_dict(self):
         return {'class': self.__class__.__name__,
@@ -820,6 +1043,39 @@ class Capabilities(IData):
             self._cap[i] = Capabilities.SUPPORTED
 
 
+@default_property('id', doc="Unique identifier")
+@default_property('name', doc="User given name")
+@default_property('type', doc="Cache hardware type")
+@default_property('status', doc='Battery status')
+@default_property('system_id', doc="System identifier")
+@default_property("plugin_data", doc="Private plugin data")
+class Battery(IData):
+    SUPPORTED_SEARCH_KEYS = ['id', 'system_id']
+
+    TYPE_UNKNOWN = 1
+    TYPE_OTHER = 2
+    TYPE_CHEMICAL = 3
+    TYPE_CAPACITOR = 4
+
+    STATUS_UNKNOWN = 1 << 0
+    STATUS_OTHER = 1 << 1
+    STATUS_OK = 1 << 2
+    STATUS_DISCHARGING = 1 << 3
+    STATUS_CHARGING = 1 << 4
+    STATUS_LEARNING = 1 << 5
+    STATUS_DEGRADED = 1 << 6
+    STATUS_ERROR = 1 << 7
+
+    def __init__(self, _id, _name, _type, _status, _system_id,
+                 _plugin_data=None):
+        self._id = _id
+        self._name = _name
+        self._type = _type
+        self._status = _status
+        self._system_id = _system_id
+        self._plugin_data = _plugin_data
+
+
 if __name__ == '__main__':
-    #TODO Need some unit tests that encode/decode all the types with nested
+    # TODO Need some unit tests that encode/decode all the types with nested
     pass

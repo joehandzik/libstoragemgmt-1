@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2011-2014 Red Hat, Inc.
+ * Copyright (C) 2011-2016 Red Hat, Inc.
+ * (C) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -14,6 +15,8 @@
  * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
+ *         Joe Handzik <joseph.t.handzik@hpe.com>
+ *         Gris Ge <fge@redhat.com>
  */
 
 #ifndef LSM_DATATYPES_H
@@ -29,9 +32,9 @@
 #ifdef  __cplusplus
 extern "C" {
 #endif
-/* Helper macros to ease getter construction *//* Implementation for generic getter */
-#define MEMBER_FUNC_GET(return_type, name, param_sig,  x, validation, member, error)  \
-return_type name( param_sig )  {\
+/* Helper macros to ease getter functions */
+#define MEMBER_FUNC_GET(return_type, arg_type, validation, member, error)  \
+return_type arg_type## _## member## _get(arg_type *x)  {\
     if( validation(x) ) {      \
         return x->member;      \
     } else {                   \
@@ -113,11 +116,11 @@ struct _lsm_nfs_export {
     char *fs_id;                /**< File system id */
     char *export_path;          /**< Export path */
     char *auth_type;            /**< Supported authentication types */
-    lsm_string_list *root;        /**< List of hosts with root access */
-    lsm_string_list *rw;          /**< List of hosts with read & write access */
-    lsm_string_list *ro;          /**< List of hosts with read only access */
-    uint64_t anonuid;           /**< Uid that should map to anonymous */
-    uint64_t anongid;           /**< Gid that should map to anonymous */
+    lsm_string_list *root;      /**< List of hosts with root access */
+    lsm_string_list *read_write; /**< List of hosts with read & write access */
+    lsm_string_list *read_only; /**< List of hosts with read only access */
+    uint64_t anon_uid;          /**< Uid that should map to anonymous */
+    uint64_t anon_gid;          /**< Gid that should map to anonymous */
     char *options;              /**< Options */
     char *plugin_data;                  /**< Reserved for the plugin to use */
 };
@@ -136,7 +139,7 @@ struct _lsm_block_range {
 };
 
 #define LSM_CAPABILITIES_MAGIC  0xAA7A0008
-#define LSM_IS_CAPABILITIY(obj)    MAGIC_CHECK(obj, LSM_CAPABILITIES_MAGIC)
+#define LSM_IS_CAPABILITY(obj)    MAGIC_CHECK(obj, LSM_CAPABILITIES_MAGIC)
 
 #define LSM_CAP_MAX 512
 
@@ -162,6 +165,9 @@ struct _lsm_system {
     uint32_t status;            /**< Enumerated status value */
     char *status_info;          /**< System status text */
     char *plugin_data;          /**< Reserved for the plugin to use */
+    const char *fw_version;     /**< Firmware version */
+    lsm_system_mode_type mode;  /**< System mode */
+    int read_cache_pct;         /**< Read cache percentage */
 };
 
 #define LSM_CONNECT_MAGIC       0xAA7A000A
@@ -188,6 +194,7 @@ struct LSM_DLL_LOCAL _lsm_plugin {
     struct lsm_nas_ops_v1 *nas_ops;    /**< Callbacks for NAS ops */
     struct lsm_fs_ops_v1 *fs_ops;      /**< Callbacks for fs ops */
     struct lsm_ops_v1_2 *ops_v1_2;     /**< Callbacks for v1.2 ops */
+    struct lsm_ops_v1_3 *ops_v1_3;     /**< Callbacks for v1.3 ops */
 };
 
 
@@ -255,7 +262,7 @@ struct LSM_DLL_LOCAL _lsm_fs_ss {
     uint32_t magic;
     char *id;
     char *name;
-    uint64_t ts;
+    uint64_t time_stamp;
     char *plugin_data;                  /**< Reserved for the plugin to use */
 };
 
@@ -265,11 +272,15 @@ struct LSM_DLL_LOCAL _lsm_disk {
     uint32_t magic;
     char *id;
     char *name;
-    lsm_disk_type disk_type;
+    lsm_disk_type type;
     uint64_t block_size;
-    uint64_t block_count;
-    uint64_t disk_status;       /* Bit field */
+    uint64_t number_of_blocks;
+    uint64_t status;                    /* Bit field */
     char *system_id;
+    char *vpd83;
+    const char *location;
+    int32_t rpm;
+    lsm_disk_link_type link_type;
 };
 
 #define LSM_HASH_MAGIC     0xAA7A0011
@@ -285,7 +296,7 @@ struct LSM_DLL_LOCAL _lsm_hash {
 struct LSM_DLL_LOCAL _lsm_target_port {
     uint32_t magic;
     char *id;
-    lsm_target_port_type port_type;
+    lsm_target_port_type type;
     char *service_address;
     char *network_address;
     char *physical_address;
@@ -294,6 +305,17 @@ struct LSM_DLL_LOCAL _lsm_target_port {
     char *plugin_data;
 };
 
+#define LSM_BATTERY_MAGIC     0xAA7A0013
+#define LSM_IS_BATTERY(obj)   MAGIC_CHECK(obj, LSM_BATTERY_MAGIC)
+struct LSM_DLL_LOCAL _lsm_battery {
+    uint32_t magic;
+    char *id;
+    char *name;
+    lsm_battery_type type;
+    uint64_t status;
+    char *system_id;
+    char *plugin_data;
+};
 
 /**
  * Returns a pointer to a newly created connection structure.

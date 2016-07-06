@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2015 Red Hat, Inc.
+# Copyright (C) 2011-2016 Red Hat, Inc.
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -25,7 +25,7 @@ import sqlite3
 from lsm import (size_human_2_size_bytes)
 from lsm import (System, Volume, Disk, Pool, FileSystem, AccessGroup,
                  FsSnapshot, NfsExport, md5, LsmError, TargetPort,
-                 ErrorNumber, JobStatus)
+                 ErrorNumber, JobStatus, Battery)
 
 
 def _handle_errors(method):
@@ -59,8 +59,8 @@ def _random_vpd():
     """
     Generate a random VPD83 NAA_Type3 ID
     """
-    vpd = ['60']
-    for _ in range(0, 15):
+    vpd = ['50']
+    for _ in range(0, 7):
         vpd.append(str('%02x' % (random.randint(0, 255))))
     return "".join(vpd)
 
@@ -122,7 +122,7 @@ class PoolRAID(object):
 
 
 class BackStore(object):
-    VERSION = "3.4"
+    VERSION = "3.9"
     VERSION_SIGNATURE = 'LSM_SIMULATOR_DATA_%s_%s' % (VERSION, md5(VERSION))
     JOB_DEFAULT_DURATION = 1
     JOB_DATA_TYPE_VOL = 1
@@ -133,6 +133,11 @@ class BackStore(object):
     SYS_NAME = "LSM simulated storage plug-in"
     BLK_SIZE = 512
     DEFAULT_STRIP_SIZE = 128 * 1024  # 128 KiB
+    SYS_MODE = System.MODE_HARDWARE_RAID
+    READ_CACHE_PCT = 10
+    DEFAULT_WRITE_CACHE_POLICY = Volume.WRITE_CACHE_POLICY_AUTO
+    DEFAULT_READ_CACHE_POLICY = Volume.READ_CACHE_POLICY_ENABLED
+    DEFAULT_PHYSICAL_DISK_CACHE = Volume.PHYSICAL_DISK_CACHE_DISABLED
 
     _LIST_SPLITTER = '#'
 
@@ -145,12 +150,13 @@ class BackStore(object):
         'strip_size']
 
     DISK_KEY_LIST = [
-        'id', 'name', 'total_space', 'disk_type', 'status',
-        'owner_pool_id', 'role']
+        'id', 'name', 'total_space', 'disk_type', 'status', 'vpd83',
+        'location', 'owner_pool_id', 'role', 'rpm', 'link_type']
 
     VOL_KEY_LIST = [
         'id', 'vpd83', 'name', 'total_space', 'consumed_size',
-        'pool_id', 'admin_state', 'thinp', 'is_hw_raid_vol']
+        'pool_id', 'admin_state', 'thinp', 'is_hw_raid_vol',
+        'write_cache_policy', 'read_cache_policy', 'phy_disk_cache']
 
     TGT_KEY_LIST = [
         'id', 'port_type', 'service_address', 'network_address',
@@ -171,6 +177,8 @@ class BackStore(object):
         'id', 'fs_id', 'exp_path', 'auth_type', 'anon_uid', 'anon_gid',
         'options', 'exp_root_hosts_str', 'exp_rw_hosts_str',
         'exp_ro_hosts_str']
+
+    BAT_KEY_LIST = ['id', 'name', 'type', 'status']
 
     SUPPORTED_VCR_RAID_TYPES = [
         Volume.RAID_TYPE_RAID0, Volume.RAID_TYPE_RAID1,
@@ -204,8 +212,7 @@ class BackStore(object):
             status INTEGER NOT NULL,
             status_info TEXT,
             version TEXT NOT NULL);
-            """)
-            # ^ version hold the signature of data
+            """)    # version hold the signature of data
 
         sql_cmd += (
             "CREATE TABLE tgts ("
@@ -229,8 +236,9 @@ class BackStore(object):
             # ^ Indicate this pool is allocated from # other pool
             "member_type INTEGER, "
             "strip_size INTEGER, "
-            "total_space LONG);\n")
+            "total_space LONG);\n"
             # ^ total_space here is only for sub-pool (pool from pool)
+            )
 
         sql_cmd += (
             "CREATE TABLE disks ("
@@ -239,9 +247,13 @@ class BackStore(object):
             "disk_type INTEGER NOT NULL, "
             "status INTEGER NOT NULL, "
             "disk_prefix TEXT NOT NULL, "
+            "location TEXT NOT NULL, "
             "owner_pool_id INTEGER, "
             # ^ Indicate this disk is used to assemble a pool
             "role TEXT,"
+            "vpd83 TEXT,"
+            "rpm INTEGER, "
+            "link_type INTEGER, "
             "FOREIGN KEY(owner_pool_id) "
             "REFERENCES pools(id) ON DELETE CASCADE );\n")
 
@@ -258,6 +270,9 @@ class BackStore(object):
             "is_hw_raid_vol INTEGER, "
             # ^ Once its volume deleted, pool will be delete also.
             # For HW RAID simulation only.
+            "write_cache_policy INTEGER NOT NULL, "
+            "read_cache_policy INTEGER NOT NULL, "
+            "phy_disk_cache INTEGER NOT NULL, "
 
             "pool_id INTEGER NOT NULL, "
             "FOREIGN KEY(pool_id) "
@@ -363,6 +378,13 @@ class BackStore(object):
             "data_type INTEGER, "
             "data_id TEXT);\n")
 
+        sql_cmd += (
+            "CREATE TABLE batteries ("
+            "id INTEGER PRIMARY KEY, "
+            "name TEXT NOT NULL, "
+            "type INTEGER NOT NULL, "
+            "status INTEGER NOT NULL);\n")
+
         # Create views
         sql_cmd += (
             """
@@ -449,6 +471,10 @@ class BackStore(object):
                     disk_type,
                     role,
                     status,
+                    vpd83,
+                    rpm,
+                    link_type,
+                    location,
                     owner_pool_id
                 FROM
                     disks
@@ -467,7 +493,10 @@ class BackStore(object):
                     vol.admin_state,
                     vol.thinp,
                     vol.is_hw_raid_vol,
-                    vol_mask.ag_id ag_id
+                    vol_mask.ag_id ag_id,
+                    vol.write_cache_policy,
+                    vol.read_cache_policy,
+                    vol.phy_disk_cache
                 FROM
                     volumes vol
                         LEFT JOIN vol_masks vol_mask
@@ -499,9 +528,8 @@ class BackStore(object):
                 ORDER BY
                     init.init_type
             ;
-            """ % (
-            AccessGroup.INIT_TYPE_ISCSI_WWPN_MIXED,
-            AccessGroup.INIT_TYPE_UNKNOWN, BackStore._LIST_SPLITTER))
+            """ % (AccessGroup.INIT_TYPE_ISCSI_WWPN_MIXED,
+                   AccessGroup.INIT_TYPE_UNKNOWN, BackStore._LIST_SPLITTER))
 
         sql_cmd += (
             """
@@ -538,9 +566,8 @@ class BackStore(object):
                         LEFT JOIN vol_masks vol_mask
                             ON vol_mask.ag_id = ag_new.id
             ;
-            """ % (
-            AccessGroup.INIT_TYPE_ISCSI_WWPN_MIXED,
-            AccessGroup.INIT_TYPE_UNKNOWN, BackStore._LIST_SPLITTER))
+            """ % (AccessGroup.INIT_TYPE_ISCSI_WWPN_MIXED,
+                   AccessGroup.INIT_TYPE_UNKNOWN, BackStore._LIST_SPLITTER))
 
         sql_cmd += (
             """
@@ -603,9 +630,8 @@ class BackStore(object):
                 GROUP BY
                     exp.id;
             ;
-            """ % (
-            BackStore._LIST_SPLITTER, BackStore._LIST_SPLITTER,
-            BackStore._LIST_SPLITTER))
+            """ % (BackStore._LIST_SPLITTER, BackStore._LIST_SPLITTER,
+                   BackStore._LIST_SPLITTER))
 
         sql_cur = self.sql_conn.cursor()
         try:
@@ -669,6 +695,10 @@ class BackStore(object):
                         'total_space': size_bytes_2t,
                         'disk_type': Disk.TYPE_SATA,
                         'status': Disk.STATUS_OK,
+                        'vpd83': _random_vpd(),
+                        'rpm': 7200,
+                        'link_type': Disk.LINK_TYPE_ATA,
+                        'location': "Port: 1I Box: 1 Bay: 1",
                     })
                 pool_1_disks.append(self.lastrowid)
 
@@ -682,12 +712,16 @@ class BackStore(object):
                         'total_space': size_bytes_2t,
                         'disk_type': Disk.TYPE_SAS,
                         'status': Disk.STATUS_OK,
+                        'vpd83': _random_vpd(),
+                        'rpm': 15000,
+                        'link_type': Disk.LINK_TYPE_SAS,
+                        'location': "Port: 1I Box: 1 Bay: 2",
                     })
                 if len(test_pool_disks) < 2:
                     test_pool_disks.append(self.lastrowid)
 
             ssd_pool_disks = []
-            # Add 5 SSD disks(512GiB)
+            # Add 5 SATA SSD disks(512GiB)
             for _ in range(0, 5):
                 self._data_add(
                     'disks',
@@ -696,11 +730,15 @@ class BackStore(object):
                         'total_space': size_bytes_512g,
                         'disk_type': Disk.TYPE_SSD,
                         'status': Disk.STATUS_OK,
+                        'vpd83': _random_vpd(),
+                        'rpm': Disk.RPM_NON_ROTATING_MEDIUM,
+                        'link_type': Disk.LINK_TYPE_ATA,
+                        'location': "Port: 1I Box: 1 Bay: 3",
                     })
                 if len(ssd_pool_disks) < 2:
                     ssd_pool_disks.append(self.lastrowid)
 
-            # Add 7 SSD disks(2TiB)
+            # Add 7 SAS SSD disks(2TiB)
             for _ in range(0, 7):
                 self._data_add(
                     'disks',
@@ -709,6 +747,10 @@ class BackStore(object):
                         'total_space': size_bytes_2t,
                         'disk_type': Disk.TYPE_SSD,
                         'status': Disk.STATUS_OK,
+                        'vpd83': _random_vpd(),
+                        'rpm': Disk.RPM_NON_ROTATING_MEDIUM,
+                        'link_type': Disk.LINK_TYPE_SAS,
+                        'location': "Port: 1I Box: 1 Bay: 4",
                     })
 
             pool_1_id = self.sim_pool_create_from_disk(
@@ -792,6 +834,22 @@ class BackStore(object):
                     'network_address': '[2001:470:1f09:efe:a64e:31ff::1]:3260',
                     'physical_address': 'a4:4e:31:47:f4:e1',
                     'physical_name': 'iSCSI_c_0e',
+                })
+
+            self._data_add(
+                'batteries',
+                {
+                    'name': 'Battery SIMB01, 8000 mAh, 05 March 2016',
+                    'type': Battery.TYPE_CHEMICAL,
+                    'status': Battery.STATUS_OK,
+                })
+
+            self._data_add(
+                'batteries',
+                {
+                    'name': 'Capacitor SIMC01, 500 J, 05 March 2016',
+                    'type': Battery.TYPE_CAPACITOR,
+                    'status': Battery.STATUS_OK,
                 })
 
             self.trans_commit()
@@ -903,6 +961,9 @@ class BackStore(object):
 
         data = None
         data_type = None
+
+        if progress < 0:
+            progress = 0
 
         if progress >= 100:
             progress = 100
@@ -1070,6 +1131,9 @@ class BackStore(object):
         sim_vol['consumed_size'] = size_bytes
         sim_vol['admin_state'] = Volume.ADMIN_STATE_ENABLED
         sim_vol['is_hw_raid_vol'] = is_hw_raid_vol
+        sim_vol['write_cache_policy'] = BackStore.DEFAULT_WRITE_CACHE_POLICY
+        sim_vol['read_cache_policy'] = BackStore.DEFAULT_READ_CACHE_POLICY
+        sim_vol['phy_disk_cache'] = BackStore.DEFAULT_PHYSICAL_DISK_CACHE
 
         try:
             self._data_add("volumes", sim_vol)
@@ -1608,6 +1672,24 @@ class BackStore(object):
         """
         return self._get_table('tgts', BackStore.TGT_KEY_LIST)
 
+    def sim_bats(self):
+        """
+        Return a list of sim_bat dict.
+        """
+        return self._get_table('batteries', BackStore.BAT_KEY_LIST)
+
+    def sim_vol_pdc_set(self, sim_vol_id, pdc):
+        self.sim_vol_of_id(sim_vol_id)
+        self._data_update('volumes', sim_vol_id, 'phy_disk_cache', pdc)
+
+    def sim_vol_rcp_set(self, sim_vol_id, rcp):
+        self.sim_vol_of_id(sim_vol_id)
+        self._data_update('volumes', sim_vol_id, 'read_cache_policy', rcp)
+
+    def sim_vol_wcp_set(self, sim_vol_id, wcp):
+        self.sim_vol_of_id(sim_vol_id)
+        self._data_update('volumes', sim_vol_id, 'write_cache_policy', wcp)
+
 
 class SimArray(object):
     SIM_DATA_FILE = os.getenv("LSM_SIM_DATA",
@@ -1725,13 +1807,23 @@ class SimArray(object):
     def _sim_sys_2_lsm(sim_sys):
         return System(
             sim_sys['id'], sim_sys['name'], sim_sys['status'],
-            sim_sys['status_info'])
+            sim_sys['status_info'], _fw_version=sim_sys["version"],
+            _mode=BackStore.SYS_MODE, _read_cache_pct=BackStore.READ_CACHE_PCT)
 
     @_handle_errors
     def systems(self):
         return list(
             SimArray._sim_sys_2_lsm(sim_sys)
             for sim_sys in self.bs_obj.sim_syss())
+
+    @_handle_errors
+    def system_read_cache_pct_update(self, system, read_pct, flags=0):
+        if system.id != BackStore.SYS_ID:
+            raise LsmError(
+                ErrorNumber.NOT_FOUND_SYSTEM,
+                "System not found")
+
+        return None
 
     @staticmethod
     def _sim_vol_2_lsm(sim_vol):
@@ -1782,7 +1874,9 @@ class SimArray(object):
             sim_disk['name'],
             sim_disk['disk_type'], BackStore.BLK_SIZE,
             int(sim_disk['total_space'] / BackStore.BLK_SIZE),
-            disk_status, BackStore.SYS_ID)
+            disk_status, BackStore.SYS_ID, _vpd83=sim_disk['vpd83'],
+            _location=sim_disk['location'],
+            _rpm=sim_disk['rpm'], _link_type=sim_disk['link_type'])
 
     @_handle_errors
     def disks(self):
@@ -2372,3 +2466,95 @@ class SimArray(object):
         sim_vol = self.bs_obj.sim_vol_of_id(sim_vol_id)
         self.bs_obj.trans_commit()
         return SimArray._sim_vol_2_lsm(sim_vol)
+
+    @_handle_errors
+    def volume_ident_led_on(self, volume, flags=0):
+        sim_volume_id = SimArray._lsm_id_to_sim_id(
+                            volume.id, LsmError(
+                                           ErrorNumber.NOT_FOUND_VOLUME,
+                                           "Volume not found"))
+        sim_vol = self.bs_obj.sim_vol_of_id(sim_volume_id)
+
+        return None
+
+    @_handle_errors
+    def volume_ident_led_off(self, volume, flags=0):
+        sim_volume_id = SimArray._lsm_id_to_sim_id(
+                            volume.id, LsmError(
+                                           ErrorNumber.NOT_FOUND_VOLUME,
+                                           "Volume not found"))
+        sim_vol = self.bs_obj.sim_vol_of_id(sim_volume_id)
+
+        return None
+
+    @staticmethod
+    def _sim_bat_2_lsm(sim_bat):
+        bat_id = "BATTERY_ID_%0*d" % (SimArray.ID_FMT, sim_bat['id'])
+        return Battery(
+            bat_id, sim_bat['name'], sim_bat['type'],
+            sim_bat['status'], BackStore.SYS_ID)
+
+    @_handle_errors
+    def batteries(self):
+        return list(SimArray._sim_bat_2_lsm(t) for t in self.bs_obj.sim_bats())
+
+    @_handle_errors
+    def volume_cache_info(self, lsm_vol):
+        sim_vol = self.bs_obj.sim_vol_of_id(SimArray._lsm_id_to_sim_id(
+            lsm_vol.id, LsmError(ErrorNumber.NOT_FOUND_VOLUME,
+                                 "Volume not found")))
+        write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_THROUGH
+        read_cache_status = Volume.READ_CACHE_STATUS_DISABLED
+
+        flag_battery_ok = False
+        for sim_bat in self.bs_obj.sim_bats():
+            if sim_bat['status'] == Battery.STATUS_OK:
+                flag_battery_ok = True
+
+        # Assuming system always has functional RAM
+        if sim_vol['write_cache_policy'] == Volume.WRITE_CACHE_POLICY_AUTO:
+            if flag_battery_ok:
+                write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_BACK
+
+        elif (sim_vol['write_cache_policy'] ==
+              Volume.WRITE_CACHE_POLICY_WRITE_BACK):
+            write_cache_status = Volume.WRITE_CACHE_STATUS_WRITE_BACK
+        elif (sim_vol['write_cache_policy'] ==
+              Volume.WRITE_CACHE_POLICY_UNKNOWN):
+            write_cache_status = Volume.WRITE_CACHE_STATUS_UNKNOWN
+
+        if sim_vol['read_cache_policy'] == Volume.READ_CACHE_POLICY_ENABLED:
+            read_cache_status = Volume.READ_CACHE_STATUS_ENABLED
+        elif sim_vol['read_cache_policy'] == Volume.READ_CACHE_POLICY_UNKNOWN:
+            read_cache_status = Volume.READ_CACHE_STATUS_UNKNOWN
+
+        return [sim_vol['write_cache_policy'], write_cache_status,
+                sim_vol['read_cache_policy'], read_cache_status,
+                sim_vol['phy_disk_cache']]
+
+    @_handle_errors
+    def volume_physical_disk_cache_update(self, volume, pdc, flags=0):
+        self.bs_obj.trans_begin()
+        sim_vol_id = SimArray._lsm_id_to_sim_id(
+            volume.id, LsmError(ErrorNumber.NOT_FOUND_VOLUME,
+                                "Volume not found"))
+        self.bs_obj.sim_vol_pdc_set(sim_vol_id, pdc)
+        self.bs_obj.trans_commit()
+
+    @_handle_errors
+    def volume_write_cache_policy_update(self, volume, wcp, flags=0):
+        self.bs_obj.trans_begin()
+        sim_vol_id = SimArray._lsm_id_to_sim_id(
+            volume.id, LsmError(ErrorNumber.NOT_FOUND_VOLUME,
+                                "Volume not found"))
+        self.bs_obj.sim_vol_wcp_set(sim_vol_id, wcp)
+        self.bs_obj.trans_commit()
+
+    @_handle_errors
+    def volume_read_cache_policy_update(self, volume, rcp, flags=0):
+        self.bs_obj.trans_begin()
+        sim_vol_id = SimArray._lsm_id_to_sim_id(
+            volume.id, LsmError(ErrorNumber.NOT_FOUND_VOLUME,
+                                "Volume not found"))
+        self.bs_obj.sim_vol_rcp_set(sim_vol_id, rcp)
+        self.bs_obj.trans_commit()

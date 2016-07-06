@@ -23,9 +23,9 @@ except ImportError:
 
 from datetime import datetime
 
-from lsm import (size_bytes_2_size_human, LsmError, ErrorNumber,
+from lsm import (size_bytes_2_size_human, LsmError, ErrorNumber, Battery,
                  System, Pool, Disk, Volume, AccessGroup,
-                 FileSystem, FsSnapshot, NfsExport, TargetPort)
+                 FileSystem, FsSnapshot, NfsExport, TargetPort, LocalDisk)
 
 BIT_MAP_STRING_SPLITTER = ','
 
@@ -85,6 +85,16 @@ _SYSTEM_STATUS_CONV = {
 
 def system_status_to_str(system_status):
     return _bit_map_to_str(system_status, _SYSTEM_STATUS_CONV)
+
+
+_SYSTEM_MODE_CONV = {
+    System.MODE_HARDWARE_RAID: "HW RAID",
+    System.MODE_HBA: "HBA",
+}
+
+
+def system_mode_to_str(system_mode):
+    return _SYSTEM_MODE_CONV.get(system_mode, "")
 
 
 _POOL_STATUS_CONV = {
@@ -236,6 +246,54 @@ def tgt_port_type_to_str(port_type):
     return _enum_type_to_str(port_type, _TGT_PORT_TYPE_CONV)
 
 
+def disk_rpm_to_str(rpm):
+    if rpm == '':
+        return "No Support"
+    if rpm == Disk.RPM_NO_SUPPORT:
+        return "No Support"
+    if rpm == Disk.RPM_UNKNOWN:
+        return "Unknown"
+    if rpm == Disk.RPM_NON_ROTATING_MEDIUM:
+        return "Non-Rotating Medium"
+    if rpm == Disk.RPM_ROTATING_UNKNOWN_SPEED:
+        return "Rotating Medium Unknown Speed"
+    return str(rpm)
+
+
+def disk_link_type_to_str(link_type):
+    if link_type == '':
+        return "No Support"
+    return _enum_type_to_str(link_type, LocalDiskInfo._LINK_TYPE_MAP)
+
+
+_BATTERY_TYPE_CONV = {
+    Battery.TYPE_UNKNOWN: "Unknown",
+    Battery.TYPE_OTHER: "Other",
+    Battery.TYPE_CHEMICAL: "Chemical",
+    Battery.TYPE_CAPACITOR: "Capacitor",
+}
+
+
+def battery_type_to_str(battery_type):
+    return _enum_type_to_str(battery_type, _BATTERY_TYPE_CONV)
+
+
+_BATTERY_STATUS_CONV = {
+    Battery.STATUS_UNKNOWN: "Unknown",
+    Battery.STATUS_OTHER: "Other",
+    Battery.STATUS_OK: "OK",
+    Battery.STATUS_DISCHARGING: "Discharging",
+    Battery.STATUS_CHARGING: "Charging",
+    Battery.STATUS_LEARNING: "Learning",
+    Battery.STATUS_DEGRADED: "Degraded",
+    Battery.STATUS_ERROR: "Error",
+}
+
+
+def battery_status_to_str(battery_status):
+    return _bit_map_to_str(battery_status, _BATTERY_STATUS_CONV)
+
+
 class PlugData(object):
     def __init__(self, description, plugin_version):
             self.desc = description
@@ -311,6 +369,99 @@ class VcrCap(object):
         self.strip_sizes = strip_sizes
 
 
+class LocalDiskInfo(object):
+    _LINK_TYPE_MAP = {
+        Disk.LINK_TYPE_NO_SUPPORT: "No Support",
+        Disk.LINK_TYPE_UNKNOWN: "Unknown",
+        Disk.LINK_TYPE_FC: "FC",
+        Disk.LINK_TYPE_SSA: "SSA",
+        Disk.LINK_TYPE_SBP: "SBP",
+        Disk.LINK_TYPE_SRP: "SRP",
+        Disk.LINK_TYPE_ISCSI: "iSCSI",
+        Disk.LINK_TYPE_SAS: "SAS",
+        Disk.LINK_TYPE_ADT: "ADT",
+        Disk.LINK_TYPE_ATA: "PATA/SATA",
+        Disk.LINK_TYPE_USB: "USB",
+        Disk.LINK_TYPE_SOP: "SCSI over PCIE",
+        Disk.LINK_TYPE_PCIE: "PCI-E",
+    }
+
+    def __init__(self, sd_path, vpd83, rpm, link_type):
+        self.sd_path = sd_path
+        self.vpd83 = vpd83
+        self.rpm = rpm
+        self.link_type = link_type
+
+
+class VolumeRAMCacheInfo(object):
+
+    _PHY_DISK_CACHE_STATUS_MAP = {
+        Volume.PHYSICAL_DISK_CACHE_USE_DISK_SETTING: "Use Disk Setting",
+        Volume.PHYSICAL_DISK_CACHE_ENABLED: "Enabled",
+        Volume.PHYSICAL_DISK_CACHE_DISABLED: "Disabled",
+        Volume.PHYSICAL_DISK_CACHE_UNKNOWN: "Unknown",
+    }
+
+    _W_CACHE_POLICY_MAP = {
+        Volume.WRITE_CACHE_POLICY_UNKNOWN: "Unknown",
+        Volume.WRITE_CACHE_POLICY_WRITE_BACK: "Write Back",
+        Volume.WRITE_CACHE_POLICY_AUTO: "Auto",
+        Volume.WRITE_CACHE_POLICY_WRITE_THROUGH: "Write Through",
+    }
+
+    _W_CACHE_STATUS_MAP = {
+        Volume.WRITE_CACHE_STATUS_UNKNOWN: "Unknown",
+        Volume.WRITE_CACHE_STATUS_WRITE_BACK: "Write Back",
+        Volume.WRITE_CACHE_STATUS_WRITE_THROUGH: "Write Through",
+    }
+
+    _R_CACHE_POLICY_MAP = {
+        Volume.READ_CACHE_POLICY_UNKNOWN: "Unknown",
+        Volume.READ_CACHE_POLICY_ENABLED: "Enabled",
+        Volume.READ_CACHE_POLICY_DISABLED: "Disabled",
+    }
+
+    _R_CACHE_STATUS_MAP = {
+        Volume.READ_CACHE_STATUS_UNKNOWN: "Unknown",
+        Volume.READ_CACHE_STATUS_ENABLED: "Enabled",
+        Volume.READ_CACHE_STATUS_DISABLED: "Disabled",
+    }
+
+    def __init__(self, vol_id, write_cache_policy, write_cache_status,
+                 read_cache_policy, read_cache_status, phy_disk_cache):
+        self.vol_id = vol_id
+        self.write_cache_policy = write_cache_policy
+        self.write_cache_status = write_cache_status
+        self.read_cache_policy = read_cache_policy
+        self.read_cache_status = read_cache_status
+        self.phy_disk_cache = phy_disk_cache
+
+    @staticmethod
+    def phy_disk_cache_status_to_str(phy_disk_cache):
+        return _enum_type_to_str(
+            phy_disk_cache, VolumeRAMCacheInfo._PHY_DISK_CACHE_STATUS_MAP)
+
+    @staticmethod
+    def w_cache_policy_to_str(w_cache_p):
+        return _enum_type_to_str(
+            w_cache_p, VolumeRAMCacheInfo._W_CACHE_POLICY_MAP)
+
+    @staticmethod
+    def w_cache_status_to_str(w_cache_status):
+        return _enum_type_to_str(
+            w_cache_status, VolumeRAMCacheInfo._W_CACHE_STATUS_MAP)
+
+    @staticmethod
+    def r_cache_policy_to_str(r_cache_p):
+        return _enum_type_to_str(
+            r_cache_p, VolumeRAMCacheInfo._R_CACHE_POLICY_MAP)
+
+    @staticmethod
+    def r_cache_status_to_str(r_cache_status):
+        return _enum_type_to_str(
+            r_cache_status, VolumeRAMCacheInfo._R_CACHE_STATUS_MAP)
+
+
 class DisplayData(object):
 
     def __init__(self):
@@ -331,6 +482,9 @@ class DisplayData(object):
     SYSTEM_HEADER['name'] = 'Name'
     SYSTEM_HEADER['status'] = 'Status'
     SYSTEM_HEADER['status_info'] = 'Info'
+    SYSTEM_HEADER['fw_version'] = "FW Ver"
+    SYSTEM_HEADER['mode'] = "Mode"
+    SYSTEM_HEADER['read_cache_pct'] = "Read Cache Percentage"
 
     SYSTEM_COLUMN_SKIP_KEYS = []
     # XXX_COLUMN_SKIP_KEYS contain a list of property should be skipped when
@@ -338,6 +492,7 @@ class DisplayData(object):
 
     SYSTEM_VALUE_CONV_ENUM = {
         'status': system_status_to_str,
+        'mode': system_mode_to_str,
     }
 
     SYSTEM_VALUE_CONV_HUMAN = []
@@ -405,6 +560,7 @@ class DisplayData(object):
     VOL_HEADER['admin_state'] = 'Disabled'
     VOL_HEADER['pool_id'] = 'Pool ID'
     VOL_HEADER['system_id'] = 'System ID'
+    VOL_HEADER['sd_paths'] = 'Disk Paths'    # This is appended by cmdline.py
 
     VOL_COLUMN_SKIP_KEYS = ['block_size', 'num_of_blocks']
 
@@ -431,12 +587,19 @@ class DisplayData(object):
     DISK_HEADER['size_bytes'] = 'Size'
     DISK_HEADER['status'] = 'Status'
     DISK_HEADER['system_id'] = 'System ID'
+    DISK_HEADER['vpd83'] = 'SCSI VPD 0x83'
+    DISK_HEADER['sd_paths'] = 'Disk Paths'    # This is appended by cmdline.py
+    DISK_HEADER['rpm'] = 'Revolutions Per Minute'
+    DISK_HEADER['link_type'] = 'Link Type'
+    DISK_HEADER['location'] = 'Location'
 
-    DISK_COLUMN_SKIP_KEYS = ['block_size', 'num_of_blocks']
+    DISK_COLUMN_SKIP_KEYS = ['block_size', 'num_of_blocks', 'location']
 
     DISK_VALUE_CONV_ENUM = {
         'status': disk_status_to_str,
         'disk_type': disk_type_to_str,
+        'rpm': disk_rpm_to_str,
+        'link_type': disk_link_type_to_str,
     }
 
     DISK_VALUE_CONV_HUMAN = ['size_bytes', 'block_size']
@@ -629,10 +792,86 @@ class DisplayData(object):
         'value_conv_human': VCR_CAP_VALUE_CONV_HUMAN,
     }
 
+    LOCAL_DISK_HEADER = OrderedDict()
+    LOCAL_DISK_HEADER['sd_path'] = 'Path'
+    LOCAL_DISK_HEADER['vpd83'] = 'SCSI VPD 0x83'
+    LOCAL_DISK_HEADER['rpm'] = 'Revolutions Per Minute'
+    LOCAL_DISK_HEADER['link_type'] = 'Link Type'
+
+    LOCAL_DISK_COLUMN_SKIP_KEYS = []
+
+    LOCAL_DISK_VALUE_CONV_ENUM = {
+        'rpm': disk_rpm_to_str,
+        'link_type': disk_link_type_to_str,
+    }
+    LOCAL_DISK_VALUE_CONV_HUMAN = []
+
+    VALUE_CONVERT[LocalDiskInfo] = {
+        'headers': LOCAL_DISK_HEADER,
+        'column_skip_keys': LOCAL_DISK_COLUMN_SKIP_KEYS,
+        'value_conv_enum': LOCAL_DISK_VALUE_CONV_ENUM,
+        'value_conv_human': LOCAL_DISK_VALUE_CONV_HUMAN,
+    }
+
+    BATTERY_HEADER = OrderedDict()
+    BATTERY_HEADER['id'] = 'ID'
+    BATTERY_HEADER['name'] = 'Name'
+    BATTERY_HEADER['type'] = 'Type'
+    BATTERY_HEADER['status'] = 'Status'
+    BATTERY_HEADER['system_id'] = 'System ID'
+
+    BATTERY_COLUMN_SKIP_KEYS = []
+
+    BATTERY_VALUE_CONV_ENUM = {
+        'type': battery_type_to_str,
+        'status': battery_status_to_str,
+    }
+    BATTERY_VALUE_CONV_HUMAN = ['']
+
+    VALUE_CONVERT[Battery] = {
+        'headers': BATTERY_HEADER,
+        'column_skip_keys': BATTERY_COLUMN_SKIP_KEYS,
+        'value_conv_enum': BATTERY_VALUE_CONV_ENUM,
+        'value_conv_human': BATTERY_VALUE_CONV_HUMAN,
+    }
+
+    VOL_CACHE_INFO_HEADER = OrderedDict()
+    VOL_CACHE_INFO_HEADER['vol_id'] = 'Volume ID'
+    VOL_CACHE_INFO_HEADER['write_cache_policy'] = 'Write Cache Policy'
+    VOL_CACHE_INFO_HEADER['write_cache_status'] = 'Write Cache'
+    VOL_CACHE_INFO_HEADER['read_cache_policy'] = 'Read Cache Policy'
+    VOL_CACHE_INFO_HEADER['read_cache_status'] = 'Read Cache'
+    VOL_CACHE_INFO_HEADER['phy_disk_cache'] = 'Physical Disk Cache'
+
+    VOL_CACHE_INFO_COLUMN_SKIP_KEYS = []
+
+    VOL_CACHE_INFO_VALUE_CONV_ENUM = {
+        'write_cache_policy': VolumeRAMCacheInfo.w_cache_policy_to_str,
+        'write_cache_status': VolumeRAMCacheInfo.w_cache_status_to_str,
+        'read_cache_policy': VolumeRAMCacheInfo.r_cache_policy_to_str,
+        'read_cache_status': VolumeRAMCacheInfo.r_cache_status_to_str,
+        'phy_disk_cache': VolumeRAMCacheInfo.phy_disk_cache_status_to_str,
+    }
+    VOL_CACHE_INFO_VALUE_CONV_HUMAN = []
+
+    VALUE_CONVERT[VolumeRAMCacheInfo] = {
+        'headers': VOL_CACHE_INFO_HEADER,
+        'column_skip_keys': VOL_CACHE_INFO_COLUMN_SKIP_KEYS,
+        'value_conv_enum': VOL_CACHE_INFO_VALUE_CONV_ENUM,
+        'value_conv_human': VOL_CACHE_INFO_VALUE_CONV_HUMAN,
+    }
+
     @staticmethod
     def _get_man_pro_value(obj, key, value_conv_enum, value_conv_human,
                            flag_human, flag_enum):
-        value = getattr(obj, key)
+        try:
+            value = getattr(obj, key)
+        except LsmError as lsm_err:
+            if lsm_err.code == ErrorNumber.NO_SUPPORT:
+                value = ''
+            else:
+                raise lsm_err
+
         if not flag_enum:
             if key in value_conv_enum.keys():
                 value = value_conv_enum[key](value)

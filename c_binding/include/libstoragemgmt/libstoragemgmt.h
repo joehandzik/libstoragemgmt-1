@@ -34,6 +34,8 @@
 #include "libstoragemgmt_systems.h"
 #include "libstoragemgmt_targetport.h"
 #include "libstoragemgmt_volumes.h"
+#include "libstoragemgmt_local_disk.h"
+#include "libstoragemgmt_battery.h"
 
 
 /*! \mainpage libStorageMgmt
@@ -64,8 +66,8 @@ extern "C" {
  * @param[in] timeout   Time-out in milliseconds, (initial value).
  * @param[out] e        Error data if connection failed.
  * @param[in] flags     Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code @see lsm_error_number
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_connect_password(const char *uri,
                                         const char *password,
@@ -76,8 +78,8 @@ int LSM_DLL_EXPORT lsm_connect_password(const char *uri,
  * Closes a connection to a storage provider.
  * @param[in] conn      Valid connection to close
  * @param[in] flags     Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code @see lsm_error_number
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_connect_close(lsm_connect *conn, lsm_flag flags);
 
@@ -88,8 +90,8 @@ int LSM_DLL_EXPORT lsm_connect_close(lsm_connect *conn, lsm_flag flags);
  * @param[out] desc     Plug-in description
  * @param[out] version  Plug-in version
  * @param [in] flags    Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code @see lsm_error_number
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_plugin_info_get(lsm_connect *conn, char **desc,
                                        char **version, lsm_flag flags);
@@ -100,8 +102,8 @@ int LSM_DLL_EXPORT lsm_plugin_info_get(lsm_connect *conn, char **desc,
  * @param[out] plugins    String list of plug-ins with the form
  *                        desc<sep>version
  * @param[in] flags     Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code @see lsm_error_number
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_available_plugins_list(const char *sep,
                                               lsm_string_list ** plugins,
@@ -112,7 +114,8 @@ int LSM_DLL_EXPORT lsm_available_plugins_list(const char *sep,
  * @param[in] conn          Valid connection @see lsm_connect_password
  * @param[in] timeout       Time-out (in ms)
  * @param[in] flags         Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_connect_timeout_set(lsm_connect *conn,
                                            uint32_t timeout,
@@ -123,7 +126,8 @@ int LSM_DLL_EXPORT lsm_connect_timeout_set(lsm_connect *conn,
  * @param[in]   conn        Valid connection @see lsm_connect_password
  * @param[out]  timeout     Time-out (in ms)
  * @param[in] flags         Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_connect_timeout_get(lsm_connect *conn,
                                            uint32_t *timeout,
@@ -136,7 +140,8 @@ int LSM_DLL_EXPORT lsm_connect_timeout_get(lsm_connect *conn,
  * @param[out] status           Job Status
  * @param[out] percent_complete  Percent job complete
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_job_status_get(lsm_connect *conn,
                                       const char *job_id,
@@ -153,7 +158,8 @@ int LSM_DLL_EXPORT lsm_job_status_get(lsm_connect *conn,
  * @param[out]   percent_complete    Domain 0..100
  * @param[out]   pool       lsm_pool for completed operation
  * @param[in]    flags      Reserved for future use, must be zero
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_job_status_pool_get(lsm_connect *conn,
                                            const char *job_id,
@@ -171,7 +177,8 @@ int LSM_DLL_EXPORT lsm_job_status_pool_get(lsm_connect *conn,
  * @param[out] percent_complete  Domain 0..100
  * @param[out] vol              lsm_volume for completed operation.
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_job_status_volume_get(lsm_connect *conn,
                                              const char *job_id,
@@ -189,7 +196,8 @@ int LSM_DLL_EXPORT lsm_job_status_volume_get(lsm_connect *conn,
  * @param[out] percent_complete      Percent of job complete
  * @param[out] fs                   lsm_fs * for the completed operation
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_job_status_fs_get(lsm_connect *conn,
                                          const char *job_id,
@@ -206,7 +214,8 @@ int LSM_DLL_EXPORT lsm_job_status_fs_get(lsm_connect *conn,
  * @param[out] percent_complete      Percent complete
  * @param[out] ss                   Snap shot information
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_job_status_ss_get(lsm_connect *c,
                                          const char *job,
@@ -219,7 +228,8 @@ int LSM_DLL_EXPORT lsm_job_status_ss_get(lsm_connect *c,
  * @param[in] conn          Valid connection pointer
  * @param[in] job_id        Job ID
  * @param[in] flags         Reserved for future use, must be zero.
- * @return LSM_ERR_OK, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_job_free(lsm_connect *conn, char **job_id,
                                 lsm_flag flags);
@@ -233,7 +243,8 @@ int LSM_DLL_EXPORT lsm_job_free(lsm_connect *conn, char **job_id,
  * @param[in]   system  System of interest
  * @param[out]  cap     The storage array capabilities
  * @param[in] flags     Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_capabilities(lsm_connect *conn,
                                     lsm_system *system,
@@ -248,7 +259,8 @@ int LSM_DLL_EXPORT lsm_capabilities(lsm_connect *conn,
  * @param[out]  pool_array      Array of storage pools
  * @param[out]  count           Number of storage pools
  * @param[in]   flags           Reserved, set to 0
- * @return LSM_ERR_OK on success else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_pool_list(lsm_connect *conn, char *search_key,
                                  char *search_value,
@@ -267,7 +279,8 @@ int LSM_DLL_EXPORT lsm_pool_list(lsm_connect *conn, char *search_key,
  * @param[out]  volumes         An array of lsm_volume
  * @param[out]  count           Number of elements in the lsm_volume array
  * @param[in]   flags           Reserved set to 0
- * @return LSM_ERR_OK on success else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_list(lsm_connect *conn,
                                    const char *search_key,
@@ -284,7 +297,8 @@ int LSM_DLL_EXPORT lsm_volume_list(lsm_connect *conn,
  * @param [out]     disks           An array of lsm_disk types
  * @param [out]     count           Number of disks
  * @param [in]      flags           Reserved set to zero
- * @return LSM_ERR_OK on success else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_disk_list(lsm_connect *conn,
                                  const char *search_key,
@@ -305,8 +319,9 @@ int LSM_DLL_EXPORT lsm_disk_list(lsm_connect *conn,
  * @param[out]  new_volume      Valid volume @see lsm_volume
  * @param[out]  job             Indicates job id
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. , else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_volume_create(lsm_connect *conn,
                                      lsm_pool * pool,
@@ -324,8 +339,9 @@ int LSM_DLL_EXPORT lsm_volume_create(lsm_connect *conn,
  * @param[out]  resized_volume  Pointer to newly re-sized lun.
  * @param[out]  job             Indicates job id
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. , else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_volume_resize(lsm_connect *conn,
                                      lsm_volume * volume,
@@ -344,8 +360,9 @@ int LSM_DLL_EXPORT lsm_volume_resize(lsm_connect *conn,
  * @param[out] new_replicant    New replicated volume lsm_volume_t
  * @param[out] job              Indicates job id
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. , else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_volume_replicate(lsm_connect *conn,
                                         lsm_pool *pool,
@@ -361,7 +378,8 @@ int LSM_DLL_EXPORT lsm_volume_replicate(lsm_connect *conn,
  * @param[in] system                Valid lsm_system
  * @param[out] bs                   Block size
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT
     lsm_volume_replicate_range_block_size(lsm_connect *conn,
@@ -379,8 +397,9 @@ int LSM_DLL_EXPORT
  * @param[in] num_ranges            Number of entries in ranges.
  * @param[out] job                  Indicates job id
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async., else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_volume_replicate_range(lsm_connect *conn,
                                               lsm_replication_type rep_type,
@@ -396,8 +415,9 @@ int LSM_DLL_EXPORT lsm_volume_replicate_range(lsm_connect *conn,
  * @param[in]   volume          Volume that is to be deleted.
  * @param[out]  job             Indicates job id
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. , else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_volume_delete(lsm_connect *conn,
                                      lsm_volume *volume, char **job,
@@ -408,8 +428,8 @@ int LSM_DLL_EXPORT lsm_volume_delete(lsm_connect *conn,
  * @param[in] conn                  Valid connection @see lsm_connect_password
  * @param[in] volume                Volume that is to be placed online
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_enable(lsm_connect *conn, lsm_volume *volume,
                                      lsm_flag flags);
@@ -419,8 +439,8 @@ int LSM_DLL_EXPORT lsm_volume_enable(lsm_connect *conn, lsm_volume *volume,
  * @param[in] conn                  Valid connection @see lsm_connect_password
  * @param[in] volume                Volume that is to be placed online
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_disable(lsm_connect *conn,
                                       lsm_volume * volume, lsm_flag flags);
@@ -434,8 +454,8 @@ int LSM_DLL_EXPORT lsm_volume_disable(lsm_connect *conn,
  * @param out_user                  outbound user name
  * @param out_password              outbound password
  * @param flags                     Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_iscsi_chap_auth(lsm_connect *conn,
                                        const char *init_id,
@@ -453,7 +473,8 @@ int LSM_DLL_EXPORT lsm_iscsi_chap_auth(lsm_connect *conn,
  * @param[out] groups           Array of access groups
  * @param[out] group_count      Size of array
  * @param[in] flags             Reserved set to zero
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_access_group_list(lsm_connect *conn,
                                          const char *search_key,
@@ -471,7 +492,8 @@ int LSM_DLL_EXPORT lsm_access_group_list(lsm_connect *conn,
  * @param[in] system                System to create access group for
  * @param[out] access_group         Returned access group
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT
     lsm_access_group_create(lsm_connect *conn, const char *name,
@@ -485,7 +507,8 @@ int LSM_DLL_EXPORT
  * @param[in] conn                  Valid connection @see lsm_connect_password
  * @param[in] access_group          Group to delete
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_access_group_delete(lsm_connect *conn,
                                            lsm_access_group *
@@ -499,7 +522,8 @@ int LSM_DLL_EXPORT lsm_access_group_delete(lsm_connect *conn,
  * @param[in] init_type             Type of initiator
  * @param[out] updated_access_group Updated access group
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT \
     lsm_access_group_initiator_add(lsm_connect *conn,
@@ -517,7 +541,8 @@ int LSM_DLL_EXPORT \
  * @param[in] init_type             Type of initiator, enumerated type
  * @param[out] updated_access_group Updated access group
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return[in] LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT
     lsm_access_group_initiator_delete(lsm_connect *conn,
@@ -533,7 +558,8 @@ int LSM_DLL_EXPORT
  * @param[in] access_group          Valid group pointer
  * @param[in] volume                Valid volume pointer
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_mask(lsm_connect *conn,
                                    lsm_access_group *access_group,
@@ -545,7 +571,8 @@ int LSM_DLL_EXPORT lsm_volume_mask(lsm_connect *conn,
  * @param[in] access_group          Valid group pointer
  * @param[in] volume                Valid volume pointer
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_unmask(lsm_connect *conn,
                                      lsm_access_group *access_group,
@@ -558,7 +585,8 @@ int LSM_DLL_EXPORT lsm_volume_unmask(lsm_connect *conn,
  * @param[out] volumes              An array of volumes
  * @param[out] count                Number of volumes
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT
     lsm_volumes_accessible_by_access_group(lsm_connect *conn,
@@ -573,7 +601,8 @@ int LSM_DLL_EXPORT
  * @param[out] groups               An array of access groups
  * @param[out] group_count          Number of access groups
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT
     lsm_access_groups_granted_to_volume(lsm_connect *conn,
@@ -588,7 +617,8 @@ int LSM_DLL_EXPORT
  * @param[in] volume                Valid volume
  * @param[out] yes                  1 == Yes, 0 == No
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_child_dependency(lsm_connect *conn,
                                                lsm_volume *volume,
@@ -602,7 +632,8 @@ int LSM_DLL_EXPORT lsm_volume_child_dependency(lsm_connect *conn,
  * @param[in] volume                Valid volume
  * @param[out] job                  Job id
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT \
     lsm_volume_child_dependency_delete(lsm_connect *conn, lsm_volume *volume,
@@ -615,7 +646,8 @@ int LSM_DLL_EXPORT \
  * @param[out] systems              Array of lsm_system
  * @param[out] system_count         Number of systems
  * @param[in]  flags                Reserved set to zero
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_system_list(lsm_connect *conn,
                                    lsm_system ** systems[],
@@ -629,7 +661,8 @@ int LSM_DLL_EXPORT lsm_system_list(lsm_connect *conn,
  * @param[out] fs                   Array of lsm_fs
  * @param[out] fs_count             Number of file systems
  * @param[in]  flags                Reserved set to zero
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_fs_list(lsm_connect *conn, const char *search_key,
                                const char *search_value, lsm_fs **fs[],
@@ -657,8 +690,9 @@ int LSM_DLL_EXPORT lsm_fs_create(lsm_connect *conn, lsm_pool * pool,
  * @param fs                    File system to delete
  * @param job                   Job id if job is created async.
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. ,
- * else error code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_delete(lsm_connect *conn, lsm_fs *fs,
                                  char **job, lsm_flag flags);
@@ -672,8 +706,9 @@ int LSM_DLL_EXPORT lsm_fs_delete(lsm_connect *conn, lsm_fs *fs,
  * @param cloned_fs             Newly cloned file system record
  * @param job                   Job id if operation is async.
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on succees, LSM_ERR_JOB_STARTED if async., else
- * error code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_clone(lsm_connect *conn, lsm_fs *src_fs,
                                 const char *name, lsm_fs_ss *optional_ss,
@@ -687,8 +722,9 @@ int LSM_DLL_EXPORT lsm_fs_clone(lsm_connect *conn, lsm_fs *src_fs,
  * @param[in] files                 Specific files to check (NULL OK)
  * @param[out] yes                  Zero indicates no, else yes
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error
- *         code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_child_dependency(lsm_connect *conn, lsm_fs *fs,
                                            lsm_string_list *files,
@@ -702,8 +738,9 @@ int LSM_DLL_EXPORT lsm_fs_child_dependency(lsm_connect *conn, lsm_fs *fs,
  * @param[in] files                 Specific files to check (NULL OK)
  * @param[out] job                  Job id for async. identification
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. ,
- * else error code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT
     lsm_fs_child_dependency_delete(lsm_connect *conn, lsm_fs *fs,
@@ -718,8 +755,9 @@ int LSM_DLL_EXPORT
  * @param[out] rfs                  File system information for re-sized fs
  * @param[out] job_id               Job id for async. identification
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. ,
- * else error code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_resize(lsm_connect *conn, lsm_fs *fs,
                                  uint64_t new_size_bytes, lsm_fs **rfs,
@@ -734,8 +772,9 @@ int LSM_DLL_EXPORT lsm_fs_resize(lsm_connect *conn, lsm_fs *fs,
  * @param[in] snapshot              Optional backing snapshot
  * @param[out] job                  Job id for async. operation
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async. ,
- * else error code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_file_clone(lsm_connect *conn, lsm_fs *fs,
                                      const char *src_file_name,
@@ -750,7 +789,8 @@ int LSM_DLL_EXPORT lsm_fs_file_clone(lsm_connect *conn, lsm_fs *fs,
  * @param[out] ss           An array of snapshot pointers
  * @param[out] ss_count     Number of elements in the array
  * @param[in]  flags        Reserved set to zero
- * @return LSM_ERR_OK on success, else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_fs_ss_list(lsm_connect *conn, lsm_fs *fs,
                                   lsm_fs_ss ** ss[], uint32_t * ss_count,
@@ -764,8 +804,9 @@ int LSM_DLL_EXPORT lsm_fs_ss_list(lsm_connect *conn, lsm_fs *fs,
  * @param[out] snapshot             Snapshot that was created
  * @param[out] job                  Job id if the operation is async.
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async.,
- * else error code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_ss_create(lsm_connect *c, lsm_fs *fs,
                                     const char *name, lsm_fs_ss **snapshot,
@@ -778,8 +819,9 @@ int LSM_DLL_EXPORT lsm_fs_ss_create(lsm_connect *c, lsm_fs *fs,
  * @param[in] ss                Snapshot to delete
  * @param[out] job              Job id if the operation is async.
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async., else error
- * code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_ss_delete(lsm_connect *c, lsm_fs *fs,
                                     lsm_fs_ss *ss, char **job, lsm_flag flags);
@@ -795,8 +837,9 @@ int LSM_DLL_EXPORT lsm_fs_ss_delete(lsm_connect *c, lsm_fs *fs,
  * @param all_files             0 = False else True
  * @param job                   Job id if operation is async.
  * @param[in] flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, LSM_ERR_JOB_STARTED if async., else error
- *         code
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ * @retval LSM_ERR_JOB_STARTED if async.
  */
 int LSM_DLL_EXPORT lsm_fs_ss_restore(lsm_connect *c, lsm_fs *fs, lsm_fs_ss *ss,
                                      lsm_string_list *files,
@@ -808,7 +851,8 @@ int LSM_DLL_EXPORT lsm_fs_ss_restore(lsm_connect *c, lsm_fs *fs, lsm_fs_ss *ss,
  * @param[in] c                     Valid connection
  * @param[out] types                List of types
  * @param[in] flags                 Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_nfs_auth_types(lsm_connect *c, lsm_string_list **types,
                                       lsm_flag flags);
@@ -821,7 +865,8 @@ int LSM_DLL_EXPORT lsm_nfs_auth_types(lsm_connect *c, lsm_string_list **types,
  * @param[out] exports              An array of lsm_nfs_export
  * @param[out] count                Number of items in array
  * @param[in]  flags                Reserved set to zero
- * @return LSM_ERR_OK on success else error code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_nfs_list(lsm_connect *c,
                                 const char *search_key,
@@ -843,7 +888,8 @@ int LSM_DLL_EXPORT lsm_nfs_list(lsm_connect *c,
  * @param[in] options            Array specific options
  * @param[out]  exported         Export record
  * @param[in]  flags             Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_nfs_export_fs(lsm_connect *c,
                                      const char *fs_id,
@@ -863,7 +909,8 @@ int LSM_DLL_EXPORT lsm_nfs_export_fs(lsm_connect *c,
  * @param[in] c             Valid connection
  * @param[in] e             NFS export to remove
  * @param[in] flags         Reserved for future use, must be zero.
- * @return LSM_ERR_OK on success else error code.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_nfs_export_delete(lsm_connect *c,
                                          lsm_nfs_export * e,
@@ -877,7 +924,8 @@ int LSM_DLL_EXPORT lsm_nfs_export_delete(lsm_connect *c,
  * @param[out] target_ports         Array of target ports
  * @param[out] count                Number of target ports
  * @param[in] flags                 Reserved, set to 0
- * @return LSM_ERR_OK on success else error reason
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_target_port_list(lsm_connect *c,
                                         const char *search_key,
@@ -888,7 +936,7 @@ int LSM_DLL_EXPORT lsm_target_port_list(lsm_connect *c,
 /**
  * Retrieves the pool id that the volume is derived from. New in version 1.2.
  * @param[in] c             Valid connection
- * @param[in] v             Volume ptr.
+ * @param[in] volume        Volume ptr.
  * @param[out] raid_type    Enum of lsm_volume_raid_type
  * @param[out] strip_size   Size of the strip on disk or other storage extent.
  * @param[out] disk_count   Count of disks of RAID group(s) where this volume
@@ -898,7 +946,8 @@ int LSM_DLL_EXPORT lsm_target_port_list(lsm_connect *c,
  * @param[out] opt_io_size  Optimal I/O size, also the preferred I/O size
  *                          of sequential I/O.
  * @param[in] flags         Reserved, set to 0
- * @return LSM_ERR_OK on success else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_raid_info(lsm_connect *c,
                                         lsm_volume *volume,
@@ -929,7 +978,8 @@ int LSM_DLL_EXPORT lsm_volume_raid_info(lsm_connect *c,
  *                  be NULL.
  *                  Need to use lsm_string_list_free() to free this memory.
  * @param[in] flags         Reserved, set to 0
- * @return LSM_ERR_OK on success else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_pool_member_info(lsm_connect *c,
                                         lsm_pool *pool,
@@ -960,7 +1010,8 @@ int LSM_DLL_EXPORT lsm_pool_member_info(lsm_connect *c,
  *                  The pointer of uint32_t. Indicate the item count of
  *                  supported_strip_sizes array.
  * @param[in] flags         Reserved, set to 0
- * @return LSM_ERR_OK on success else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT
     lsm_volume_raid_create_cap_get(lsm_connect *c, lsm_system *system,
@@ -994,7 +1045,8 @@ int LSM_DLL_EXPORT
  *                  Newly created volume, Pointer to the lsm_volume type
  *                  pointer.
  * @param[in] flags         Reserved, set to 0
- * @return LSM_ERR_OK on success else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_volume_raid_create(lsm_connect *c,
                                           const char *name,
@@ -1004,6 +1056,210 @@ int LSM_DLL_EXPORT lsm_volume_raid_create(lsm_connect *c,
                                           uint32_t strip_size,
                                           lsm_volume **new_volume,
                                           lsm_flag flags);
+
+/**
+ * Enable the IDENT LED for the desired volume.
+ * New in version 1.3, only available for hardware RAID cards.
+ * @param[in] c             Valid connection
+ * @param[in] volume        A single lsm_volume
+ * @param[in] flags         Reserved, set to 0
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ */
+int LSM_DLL_EXPORT lsm_volume_ident_led_on(lsm_connect *c,
+                                           lsm_volume *volume,
+                                           lsm_flag flags);
+
+/**
+ * Disable the IDENT LED for the desired volume.
+ * New in version 1.3, only available for hardware RAID cards.
+ * @param[in] c             Valid connection
+ * @param[in] volume        A single lsm_volume
+ * @param[in] flags         Reserved, set to 0
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ */
+int LSM_DLL_EXPORT lsm_volume_ident_led_off(lsm_connect *c,
+                                            lsm_volume *volume,
+                                            lsm_flag flags);
+
+/**
+ * Change the read cache percentage for the desired system.
+ * New in version 1.3, only available for hardware RAID cards.
+ * @param[in] c             Valid connection
+ * @param[in] system        A single lsm_system
+ * @param[in] read_pct      Desired read cache percentage
+ * @param[in] flags         Reserved, set to 0
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
+ */
+int LSM_DLL_EXPORT lsm_system_read_cache_pct_update(lsm_connect *c,
+                                                    lsm_system *system,
+                                                    uint32_t read_pct,
+                                                    lsm_flag flags);
+
+/**
+ * New in version 1.3.
+ * Get a list of batteries for this storage system.
+ * When present, super capacitors will also be included.
+ * @param[in]   conn            Valid connection @see lsm_connect_password
+ * @param[in]   search_key      Search key (NULL for all)
+ * @param[in]   search_value    Search value
+ * @param[out]  bs              An array of lsm_battery types
+ * @param[out]  count           Number of batteries
+ * @param[in]   flags           Reserved set to zero
+ * @return Error code as enumerated by \ref lsm_error_number.
+ *         Returns LSM_ERR_OK on success.*
+ */
+int LSM_DLL_EXPORT lsm_battery_list(lsm_connect *conn,
+                                    const char *search_key,
+                                    const char *search_value,
+                                    lsm_battery **bs[], uint32_t *count,
+                                    lsm_flag flags);
+
+/**
+ * New in version 1.3.
+ * Query RAM cache information for the specified volume.
+ * @param[in] c             Valid connection
+ * @param[in] volume        A single lsm_volume
+ * @param[in] flags         Reserved, set to 0
+ * @param[out] write_cache_policy
+ *                         The write cache policy. Valid values are:
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_WRITE_BACK
+ *                            The storage system will use write back mode if
+ *                            cache hardware found.
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_AUTO
+ *                            The controller will use write back mode when
+ *                            battery/capacitor is in good health, otherwise,
+ *                            write through mode.
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_WRITE_THROUGH
+ *                              The storage system will use write through mode.
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_UNKNOWN
+ *                              Plugin failed to detect this setting.
+ * @param[out] write_cache_status
+ *                         The status of write cache. Valid values are:
+ *                          * LSM_VOLUME_WRITE_CACHE_STATUS_WRITE_THROUGH
+ *                          * LSM_VOLUME_WRITE_CACHE_STATUS_WRITE_BACK
+ *                          * LSM_VOLUME_WRITE_CACHE_STATUS_UNKNOWN
+ * @param[out] read_cache_policy
+ *                          The policy for read cache. Valid values are:
+ *                          * LSM_VOLUME_READ_CACHE_POLICY_ENABLED
+ *                              Read cache is enabled, when reading I/O on
+ *                              previous unchanged written I/O or read I/O in
+ *                              cache will be returned to I/O initiator
+ *                              immediately without checking backing
+ *                              store(normally disk).
+ *                          * LSM_VOLUME_READ_CACHE_POLICY_DISABLED
+ *                              Read cache is disabled.
+ *                          * LSM_VOLUME_READ_CACHE_POLICY_UNKNOWN
+ *                              Plugin failed to detect the read cache policy.
+ * @param[out] read_cache_status
+ *                          The status of read cache. Valid values are:
+ *                          * LSM_VOLUME_READ_CACHE_STATUS_ENABLED
+ *                          * LSM_VOLUME_READ_CACHE_STATUS_DISABLED
+ *                          * LSM_VOLUME_READ_CACHE_STATUS_UNKNOWN
+ * @param[out] physical_disk_cache
+ *                          Whether physical disk's cache is enabled or not.
+ *                          Please be advised, HDD's physical disk ram cache
+ *                          might not be protected by storage system's battery
+ *                          or capacitor on sudden power loss, you could lose
+ *                          data if a power failure occurs during a write
+ *                          process. For SSD's physical disk cache, please
+ *                          check with the vendor of your hardware RAID card and
+ *                          SSD disk. Valid values are:
+ *                          * LSM_VOLUME_PHYSICAL_DISK_CACHE_ENABLED
+ *                              Physical disk cache enabled.
+ *                          * LSM_VOLUME_PHYSICAL_DISK_CACHE_DISABLED
+ *                              Physical disk cache disabled.
+ *                          * LSM_VOLUME_PHYSICAL_DISK_CACHE_USE_DISK_SETTING
+ *                              Physical disk cache is determined by the disk
+ *                              vendor via physical disks' SCSI caching mode
+ *                              page(0x08 page). It is strongly suggested to
+ *                              change this value to
+ *                              LSM_VOLUME_PHYSICAL_DISK_CACHE_ENABLED or
+ *                              LSM_VOLUME_PHYSICAL_DISK_CACHE_DISABLED
+ *                          * LSM_VOLUME_PHYSICAL_DISK_CACHE_UNKNOWN
+ *                              Plugin failed to detect the physical disk
+ *                              status.
+ * @return LSM_ERR_OK on success else error reason.
+ */
+int LSM_DLL_EXPORT lsm_volume_cache_info(lsm_connect *c,
+                                         lsm_volume *volume,
+                                         uint32_t *write_cache_policy,
+                                         uint32_t *write_cache_status,
+                                         uint32_t *read_cache_policy,
+                                         uint32_t *read_cache_status,
+                                         uint32_t *physical_disk_cache,
+                                         lsm_flag flags);
+
+/**
+ * New in version 1.3
+ * Change the setting of RAM physical disk cache of specified volume. On some
+ * product(like HPE SmartArray), this action will be effective at system level
+ * which means that even you are requesting a change on a specified volume, this
+ * change will apply to all other volumes on the same controller(system).
+ * @param[in] conn          Valid connection @see lsm_connect_password
+ * @param[in] volume        A single lsm_volume
+ * @param[in] pdc           Physical disk cache setting, valid values are:
+ *                          * LSM_VOLUME_PHYSICAL_DISK_CACHE_ENABLED
+ *                              Enable physical disk cache.
+ *                          * LSM_VOLUME_PHYSICAL_DISK_CACHE_DISABLED
+ *                              Disable physical disk cache
+ * @param[in] flags         Reserved set to zero
+ * @return LSM_ERR_OK on success else error reason
+ */
+int LSM_DLL_EXPORT lsm_volume_physical_disk_cache_update(lsm_connect *c,
+                                                         lsm_volume *volume,
+                                                         uint32_t pdc,
+                                                         lsm_flag flags);
+
+/**
+ * New in version 1.3
+ * Change the RAM write cache policy on specified volume. If
+ * LSM_CAP_VOLUME_WRITE_CACHE_POLICY_SET_IMPACT_READ is supported(e.g. HPE
+ * SmartArray), the changes on write cache policy might also impact read cache
+ * policy. If LSM_CAP_VOLUME_WRITE_CACHE_POLICY_SET_WB_IMPACT_OTHER is
+ * supported(e.g. HPE SmartArray), changing write cache policy to write back
+ * mode might impact other volumes in the same system.
+ * @param[in] conn          Valid connection @see lsm_connect_password
+ * @param[in] volume        A single lsm_volume
+ * @param[in] wcp           Write cache policy. Valid values are:
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_WRITE_BACK
+ *                              Change to write back mode.
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_AUTO
+ *                              Change to auto mode: use write back mode when
+ *                              battery/capacitor is healthy, otherwise use
+ *                              write through.
+ *                          * LSM_VOLUME_WRITE_CACHE_POLICY_WRITE_THROUGH
+ *                              Change to write through mode.
+ * @param[in] flags         Reserved set to zero
+ * @return LSM_ERR_OK on success else error reason
+ */
+int LSM_DLL_EXPORT lsm_volume_write_cache_policy_update(lsm_connect *c,
+                                                        lsm_volume *volume,
+                                                        uint32_t wcp,
+                                                        lsm_flag flags);
+/**
+ * New in version 1.3
+ * Change the RAM read cache policy of specified volume.
+ * If LSM_CAP_VOLUME_READ_CACHE_POLICY_SET_IMPACT_WRITE is supported(like HPE
+ * SmartArray), the changes on write cache policy might also impact read cache
+ * policy.
+ *
+ * @param[in] conn          Valid connection @see lsm_connect_password
+ * @param[in] volume        A single lsm_volume
+ * @param[in] rcp           Read cache policy. Valid values are:
+ *                          * LSM_VOLUME_READ_CACHE_POLICY_ENABLED
+ *                              Enable read cache.
+ *                          * LSM_VOLUME_READ_CACHE_POLICY_DISABLED
+ *                              Disable read cache.
+ * @param[in] flags         Reserved set to zero
+ * @return LSM_ERR_OK on success else error reason
+ */
+int LSM_DLL_EXPORT lsm_volume_read_cache_policy_update(lsm_connect *c,
+                                                       lsm_volume *volume,
+                                                       uint32_t rcp,
+                                                       lsm_flag flags);
 
 #ifdef  __cplusplus
 }

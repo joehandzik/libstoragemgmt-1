@@ -18,7 +18,7 @@
 #
 # Author: tasleson
 
-#Description:   Query array capabilities and run very basic operational tests.
+# Description:   Query array capabilities and run very basic operational tests.
 #
 # Note: This file is GPL copyright and not LGPL because:
 # 1. It is used to test the library, not provide functionality for it.
@@ -82,7 +82,7 @@ def rs(l):
         random.choice(string.ascii_uppercase) for x in range(l))
 
 
-def call(command, expected_rc=0):
+def call(command, expected_rc=0, expected_rcs=None):
     """
     Call an executable and return a tuple of exitcode, stdout, stderr
     """
@@ -93,15 +93,28 @@ def call(command, expected_rc=0):
     else:
         actual_command = command
 
-    print actual_command, 'EXPECTED Exit [%d]' % expected_rc
+    expected_rcs_str = ""
+
+    if expected_rcs is None:
+        print actual_command, 'EXPECTED Exit [%d]' % expected_rc
+    else:
+        expected_rcs_str = " ".join(str(x) for x in expected_rcs)
+        print(actual_command, 'EXPECTED Exit codes [%s]' % expected_rcs)
 
     process = Popen(actual_command, stdout=PIPE, stderr=PIPE)
     out = process.communicate()
 
-    if process.returncode != expected_rc:
-        raise RuntimeError("exit code != %s, actual= %s, stdout= %s, "
-                           "stderr= %s" % (expected_rc, process.returncode,
-                                           out[0], out[1]))
+    if process.returncode != expected_rc and \
+       expected_rcs is not None and \
+       process.returncode not in expected_rcs:
+        if expected_rcs is None:
+            raise RuntimeError("exit code != %s, actual= %s, stdout= %s, "
+                               "stderr= %s" % (expected_rc, process.returncode,
+                                               out[0], out[1]))
+        raise RuntimeError("exit code not in one of '%s', "
+                           "actual= %s, stdout= %s, stderr= %s" %
+                           (expected_rcs_str, process.returncode, out[0],
+                            out[1]))
     return process.returncode, out[0], out[1]
 
 
@@ -235,8 +248,8 @@ def resize_vol(vol_id):
           'volume-resize',
           '--vol', vol_id,
           '--size', '100M'])
-    #Some devices cannot re-size down...
-    #call([cmd, '--volume-resize', id, '--size', '30M' , '-t'+sep ])
+    # Some devices cannot re-size down...
+    # call([cmd, '--volume-resize', id, '--size', '30M' , '-t'+sep ])
 
 
 def resize_fs(fs_id):
@@ -346,6 +359,18 @@ def get_systems():
     return system_list
 
 
+def system_read_cache_pct_update_test(cap):
+    if cap['SYS_READ_CACHE_PCT_UPDATE']:
+        out = call([cmd, '-t' + sep, '--type', 'SYSTEMS'])[1]
+        system_list = parse(out)
+        for system in system_list:
+            out = call([
+                cmd, '-t' + sep, 'system-read-cache-pct-update', '--system',
+                system[0], 50])[1]
+
+    return
+
+
 def initiator_chap(initiator):
     call([cmd, 'iscsi-chap',
           '--init', initiator])
@@ -408,6 +433,13 @@ def display_check(display_list, system_id):
         call([cmd, '-H', '-t' + sep, 'list', '--type', 'POOLS'])
 
 
+def test_exit_code(cap, system_id):
+    """
+    Make sure we get the expected exit code when the command syntax is wrong
+    """
+    call([cmd, '-u'], 2)
+
+
 def test_display(cap, system_id):
     """
     Crank through supported display operations making sure we get good
@@ -433,8 +465,8 @@ def test_display(cap, system_id):
     if cap['EXPORT_AUTH']:
         to_test.append('NFS_CLIENT_AUTH')
 
-    if cap['EXPORTS']:
-        to_test.append('EXPORTS')
+    if cap['BATTERIES']:
+        to_test.append('BATTERIES')
 
     display_check(to_test, system_id)
 
@@ -525,7 +557,7 @@ def test_fs_creation(cap, system_id):
 
     if cap['FS_SNAPSHOT_CREATE'] and cap['FS_CREATE'] and cap['FS_DELETE'] \
             and cap['FS_SNAPSHOT_DELETE']:
-        #Snapshot create/delete
+        # Snapshot create/delete
         fs_id = fs_create(pool_id)
         ss = create_ss(fs_id)
         test_display(cap, system_id)
@@ -718,7 +750,7 @@ def pool_member_info_test(cap, system_id):
 def volume_raid_create_test(cap, system_id):
     if cap['VOLUME_RAID_CREATE']:
         out = call(
-            [cmd, '-t' + sep, 'volume-create-raid-cap', '--sys', system_id])[1]
+            [cmd, '-t' + sep, 'volume-raid-create-cap', '--sys', system_id])[1]
 
         if 'RAID1' not in [r[1] for r in parse(out)]:
             return
@@ -737,13 +769,14 @@ def volume_raid_create_test(cap, system_id):
             exit(10)
 
         out = call([
-            cmd, '-t' + sep, 'volume-create-raid', '--disk', free_disk_ids[0],
-            '--disk', free_disk_ids[1], '--name', 'test_volume_raid_create',
+            cmd, '-t' + sep, 'volume-raid-create', '--disk', free_disk_ids[0],
+            '--disk', free_disk_ids[1], '--name',
+            'test_volume_raid_create_%s' % rs(4),
             '--raid-type', 'raid1'])[1]
 
         volume = parse(out)
         vol_id = volume[0][0]
-        pool_id = volume[0][-2]
+        pool_id = volume[0][5]
 
         if cap['VOLUME_RAID_INFO']:
             out = call(
@@ -769,7 +802,144 @@ def volume_raid_create_test(cap, system_id):
     return
 
 
+def volume_ident_led_on_test(cap):
+    if cap['VOLUME_LED']:
+        out = call([cmd, '-t' + sep, 'list', '--type', 'volumes'])[1]
+        volume_list = parse(out)
+        for volume in volume_list:
+            out = call([
+                cmd, '-t' + sep, 'volume-ident-led-on', '--volume',
+                volume[0]])[1]
+
+    return
+
+
+def volume_ident_led_off_test(cap):
+    if cap['VOLUME_LED']:
+        out = call([cmd, '-t' + sep, 'list', '--type', 'volumes'])[1]
+        volume_list = parse(out)
+        for volume in volume_list:
+            out = call([
+                cmd, '-t' + sep, 'volume-ident-led-off', '--volume',
+                volume[0]])[1]
+
+    return
+
+
+def local_disk_list_test():
+    # Only run this by root user.
+    if os.geteuid() == 0:
+        call([cmd, 'local-disk-list'])
+    else:
+        print("Skipping test of 'local-disk-list' command when not "
+              "run by root user")
+
+
+def test_volume_cache_info():
+    # Since cmdtest is only designed to test against sim://, there is no
+    # need to check capacity or preconditions.
+    pool_id = name_to_id(OP_POOL, test_pool_name)
+    vol_id = create_volume(pool_id)
+    cache_info = parse(
+        call([cmd, '-t' + sep, 'volume-cache-info', '--vol', vol_id])[1])
+    if len(cache_info) != 1 or len(cache_info[0]) != 6:
+        print("Invalid return from volume-cache-info, should has 6 items")
+        exit(10)
+    volume_delete(vol_id)
+
+
+def test_volume_pdc_update():
+    pool_id = name_to_id(OP_POOL, test_pool_name)
+    vol_id = create_volume(pool_id)
+    for policy, result in dict(ENABLE="Enabled", DISABLE="Disabled").items():
+        cache_info = parse(
+            call([cmd, '-t' + sep, 'volume-phy-disk-cache-update',
+                 '--vol', vol_id, '--policy', policy])[1])
+        if len(cache_info) != 1 or len(cache_info[0]) < 6:
+            print("Invalid return from volume-phy-disk-cache-update, "
+                  "should has 6 or more items")
+            exit(10)
+        if cache_info[0][5] != result:
+            print("Got unexpected return from volume-phy-disk-cache-update, "
+                  "should be %s, but got %s" % (result, cache_info[0][5]))
+            exit(10)
+    volume_delete(vol_id)
+
+
+def test_volume_wcp_update():
+    pool_id = name_to_id(OP_POOL, test_pool_name)
+    vol_id = create_volume(pool_id)
+    for policy, result in dict(WB="Write Back", AUTO="Auto",
+                               WT="Write Through").items():
+        cache_info = parse(
+            call([cmd, '-t' + sep, 'volume-write-cache-policy-update',
+                 '--vol', vol_id, '--policy', policy])[1])
+        if len(cache_info) != 1 or len(cache_info[0]) < 2:
+            print("Invalid return from volume-write-cache-policy-upate, "
+                  "should has 6 or more items")
+            exit(10)
+        if cache_info[0][1] != result:
+            print("Got unexpected return from volume-write-cache-policy-update"
+                  "should be %s, but got %s" % (result, cache_info[0][1]))
+            exit(10)
+    volume_delete(vol_id)
+
+
+def test_volume_rcp_update():
+    pool_id = name_to_id(OP_POOL, test_pool_name)
+    vol_id = create_volume(pool_id)
+    for policy, result in dict(ENABLE="Enabled", DISABLE="Disabled").items():
+        cache_info = parse(
+            call([cmd, '-t' + sep, 'volume-read-cache-policy-update',
+                 '--vol', vol_id, '--policy', policy])[1])
+        if len(cache_info) != 1 or len(cache_info[0]) < 4:
+            print("Invalid return from volume-read-cache-policy-update, "
+                  "should has 6 or more items")
+            exit(10)
+        if cache_info[0][3] != result:
+            print("Got unexpected return from volume-read-cache-policy-update"
+                  "should be %s, but got %s" % (result, cache_info[0][4]))
+            exit(10)
+    volume_delete(vol_id)
+
+
+def test_local_disk_led():
+    expected_rcs = [0, 4]
+    flag_disk_found = False
+
+    if (os.geteuid() != 0):
+        print("Skipping test of 'local-disk-ident-led-on' and etc commands "
+              "when not run by root user")
+        return
+
+    disk_paths = list(x[0] for x in
+                      parse(call([cmd, '-t' + sep, 'local-disk-list'])[1]))
+
+    if len(disk_paths) == 0:
+        print("Skipping test of 'local-disk-ident-led-on' and etc commands "
+              "when no local disk found")
+        return
+
+    # Only test against maximum 4 disks
+    for disk_path in disk_paths[:4]:
+        if os.path.exists(disk_path):
+            flag_disk_found = True
+            call([cmd, 'local-disk-ident-led-on', '--path', disk_path],
+                 expected_rcs=expected_rcs)
+            call([cmd, 'local-disk-ident-led-off', '--path', disk_path],
+                 expected_rcs=expected_rcs)
+            call([cmd, 'local-disk-fault-led-on', '--path', disk_path],
+                 expected_rcs=expected_rcs)
+            call([cmd, 'local-disk-fault-led-off', '--path', disk_path],
+                 expected_rcs=expected_rcs)
+
+    if flag_disk_found is False:
+        print("Skipping test of 'local-disk-ident-led-on' and etc command "
+              "when none of these disks exists: %s" % ", ".join(disk_paths))
+
+
 def run_all_tests(cap, system_id):
+    test_exit_code(cap, system_id)
     test_display(cap, system_id)
     test_plugin_list(cap, system_id)
 
@@ -785,6 +955,13 @@ def run_all_tests(cap, system_id):
     pool_member_info_test(cap, system_id)
 
     volume_raid_create_test(cap, system_id)
+
+    local_disk_list_test()
+    test_volume_cache_info()
+    test_volume_pdc_update()
+    test_volume_wcp_update()
+    test_volume_rcp_update()
+    test_local_disk_led()
 
 if __name__ == "__main__":
     parser = OptionParser()
@@ -812,7 +989,7 @@ if __name__ == "__main__":
         if options.fs_pool_id:
             test_fs_pool_id = options.fs_pool_id
 
-    #Theory of testing.
+    # Theory of testing.
     # For each system that is available to us:
     #   Query capabilities
     #       Query all supported query operations (should have more to query)

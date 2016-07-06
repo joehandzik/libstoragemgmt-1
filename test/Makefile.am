@@ -3,11 +3,11 @@ AM_CPPFLAGS = \
 	-I@srcdir@/c_binding/include \
 	$(LIBXML_CFLAGS)
 
-EXTRA_DIST=cmdtest.py runtests.sh plugin_test.py
+EXTRA_DIST=cmdtest.py plugin_test.py test_include.sh runtests.sh.in
 
-TESTS = runtests.sh
-
+if WITH_TEST
 check_PROGRAMS = tester
 tester_CFLAGS = $(LIBCHECK_CFLAGS)
 tester_LDADD = ../c_binding/libstoragemgmt.la $(LIBCHECK_LIBS)
 tester_SOURCES = tester.c
+endif

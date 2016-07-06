@@ -1,9 +1,9 @@
 dnl Process this file with autoconf to produce a configure script.
-dnl Copyright (C) 2011 Red Hat, Inc.
+dnl Copyright (C) 2011-2016 Red Hat, Inc.
 dnl See COPYING.LIB for the License of this software
 
 AC_INIT(
-    [libstoragemgmt], [1.2.3], [libstoragemgmt-devel@lists.fedorahosted.org],
+    [libstoragemgmt], [1.3.2], [libstoragemgmt-devel@lists.fedorahosted.org],
     [], [https://github.com/libstorage/libstoragemgmt/])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -126,21 +126,57 @@ dnl ==========================================================================
 PKG_CHECK_MODULES([LIBXML], [libxml-2.0])
 PKG_CHECK_MODULES([LIBGLIB], [glib-2.0 >= 2.22.5])
 
-want_c_unit="yes"
-AC_ARG_ENABLE([build-c-unit],
-    [AC_HELP_STRING([--disable-build-c-unit], [disable building C unit test case.])],
-    [want_c_unit=${enableval}], [])
+AC_ARG_WITH([test],
+    [AC_HELP_STRING([--without-test],
+                    [disable all test case])],
+    [], [with_test=yes])
 
-if test "x${want_c_unit}" = "xyes"; then
+AM_CONDITIONAL([WITH_TEST], [test "x$with_test" = "xyes"])
+
+if test "x${with_test}" = "xyes"; then
     PKG_CHECK_MODULES([LIBCHECK], [check >= 0.9.8 ])
+
+    dnl =====================================================================
+    dnl Check for perl, used for code constants checking
+    dnl =====================================================================
+    AC_PATH_PROGS(PERL, perl)
+    if test -z $PERL ;then
+        AC_MSG_ERROR([Need 'perl' to run test cases])
+    fi
+
+    dnl =====================================================================
+    dnl Check for chrpath, valgrind, wc, used for make check
+    dnl =====================================================================
+    AC_PATH_PROG([CHRPATH], chrpath)
+    if test -z $CHRPATH ;then
+        AC_MSG_ERROR([Need 'chrpath' to run test cases])
+    fi
+
+    AC_ARG_WITH([mem-leak-test],
+        [AS_HELP_STRING([--without-mem-leak-test],
+            [Do not run memory leak test])],
+        [],
+        [with_mem_leak_test=yes])
+
+    if test "x$with_mem_leak_test" == "xyes"; then
+        AC_PATH_PROG([VALGRIND], valgrind)
+        AC_SUBST(WITH_MEM_LEAK_TEST, yes)
+        if test -z $VALGRIND ;then
+            AC_MSG_ERROR([Need 'valgrind' to run memory leak test])
+        fi
+    else
+        AC_SUBST(WITH_MEM_LEAK_TEST, no)
+    fi
+
+    AC_PATH_PROG([WC], wc)
+    if test -z $WC ;then
+        AC_MSG_ERROR([Need 'wc' to run test cases])
+    fi
+    AC_PATH_PROG([PS], ps)
+    if test -z $PS ;then
+        AC_MSG_ERROR([Need 'ps' to run test cases])
+    fi
 fi
-
-AM_CONDITIONAL([BUILD_C_UNIT], [test "x${want_c_unit}" = "xyes"])
-
-dnl =========================================================================
-dnl Check for perl, used for code constants checking
-dnl =========================================================================
-AC_PATH_PROGS(PERL, perl)
 
 dnl ==========================================================================
 dnl Check for python2 as it is needed for the base cmd line function
@@ -162,25 +198,20 @@ AM_PATH_PYTHON([2.6], [], AC_MSG_ERROR([Python interpreter 2.6 or 2.7 required])
 AC_PYTHON_MODULE([pywbem], [Required])
 AC_PYTHON_MODULE([M2Crypto], [Required])
 AC_PYTHON_MODULE([argparse], [Required])
+AC_PYTHON_MODULE([pyudev], [Required])
+PKG_CHECK_MODULES([LIBUDEV], [libudev])
+PKG_CHECK_MODULES([PYTHON2], [python2], [], [not_found_py_pkg=yes])
 
-dnl ==========================================================================
-dnl Check for libmicrohttpd and json-c as it is needed for REST API daemon
-dnl ==========================================================================
-
-AC_ARG_WITH([rest-api],
-    [AS_HELP_STRING([--without-rest-api],
-        [Do not build the REST API daemon])],
-    [],
-    [with_rest_api=yes])
-if test "x$with_rest_api" = "xyes"; then
-    PKG_CHECK_MODULES([LIBMICROHTTPD], [libmicrohttpd >= 0.9])
-    PKG_CHECK_MODULES([JSON], [json >= 0.10], [], [
-        PKG_CHECK_MODULES([JSON], [json-c], [], [
-            AC_MSG_ERROR([json-c development libraries 0.10 or later required])
-        ])
-    ])
+if test "x$not_found_py_pkg" == "xyes"; then
+    AC_CHECK_PROG([PY_CONFIG_CHECK], [python-config], [yes])
+    if test "x${PY_CONFIG_CHECK}" != "xyes"; then
+        AC_MSG_ERROR([Python2 development libraries required])
+    fi
+    PYTHON2_CFLAGS=`python-config --cflags`
+    PYTHON2_LIBS=`python-config --libs`
+    AC_SUBST(PYTHON2_CFLAGS)
+    AC_SUBST(PYTHON2_LIBS)
 fi
-AM_CONDITIONAL([WITH_REST_API], [test "x$with_rest_api" = "xyes"])
 
 dnl ==========================================================================
 dnl Add option '--without-megaraid' to exclude megaraid plugin.
@@ -296,3 +327,8 @@ AC_OUTPUT(libstoragemgmt.pc \
           packaging/libstoragemgmt.spec \
           doc/man/Makefile \
           test/Makefile)
+
+if test "x${with_test}" = "xyes"; then
+    AC_OUTPUT(test/runtests.sh)
+    chmod +x test/runtests.sh
+fi

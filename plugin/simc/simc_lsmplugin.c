@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2014 Red Hat, Inc.
+ * Copyright (C) 2011-2016 Red Hat, Inc.
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -35,14 +35,26 @@
 extern "C" {
 #endif
 
-static char name[] = "Compiled plug-in example";
+static char PLUGIN_NAME[] = "Compiled plug-in example";
 static char version[] = "0.2.0";
 static char sys_id[] = "sim-01";
+static int read_cache_pct = 20;
+static char disk_location[] = "Port: 2E Box: 3 Bay: 12";
 
 #define BS 512
 #define MAX_SYSTEMS 1
 #define MAX_FS 32
 #define MAX_EXPORT 32
+
+static int lsm_battery_list(lsm_plugin_ptr c, const char *search_key,
+                            const char *search_val, lsm_battery ***bs,
+                            uint32_t *count, lsm_flag flags);
+static int lsm_volume_cache_info(lsm_plugin_ptr c, lsm_volume *volume,
+                                 uint32_t *write_cache_policy,
+                                 uint32_t *write_cache_status,
+                                 uint32_t *read_cache_policy,
+                                 uint32_t *read_cache_status,
+                                 uint32_t *physical_disk_cache, lsm_flag flags);
 
 /**
  * Creates a md5 string (DO NOT FREE RETURN VALUE as the string is static)
@@ -51,7 +63,7 @@ static char sys_id[] = "sim-01";
  */
 char *md5(const char *data)
 {
-    int i = 0;
+    size_t i = 0;
     MD5_CTX c;
     unsigned char digest[16];
     static char digest_str[33];
@@ -60,7 +72,7 @@ char *md5(const char *data)
     MD5_Update(&c, data, strlen(data));
     MD5_Final(digest, &c);
 
-    for (i = 0; i < sizeof(digest); ++i) {
+    for (; i < sizeof(digest); ++i) {
         sprintf(&digest_str[i * 2], "%02x", (unsigned int) digest[i]);
     } return digest_str;
 }
@@ -79,15 +91,18 @@ void remove_item(void *array, int remove_index, int num_elems,
     if (array && (num_elems > 0) && (remove_index < num_elems) && elem_size) {
         /*Are we at the end?, clear that which is at the end */
         if (remove_index + 1 == num_elems) {
-            memset(array + (elem_size * (num_elems - 1)), 0, elem_size);
+            memset((uint8_t *)array + (elem_size * (num_elems - 1)), 0,
+                   elem_size);
             return;
         }
 
         /* Calculate the position of the one after that we want to remove */
-        void *src_addr = (void *) (array + ((remove_index + 1) * elem_size));
+        void *src_addr = (void *) ((uint8_t *) array +
+                                   ((remove_index + 1) * elem_size));
 
         /* Calculate the destination */
-        void *dest_addr = (void *) (array + (remove_index * elem_size));
+        void *dest_addr = (void *) ((uint8_t *) array +
+                                    (remove_index * elem_size));
 
         /* Shift the memory */
         memmove(dest_addr, src_addr, ((num_elems - 1) - remove_index) *
@@ -237,7 +252,7 @@ static void free_export(void *exp)
     lsm_nfs_export_record_free((lsm_nfs_export *) exp);
 }
 
-static struct allocated_fs *alloc_fs_record()
+static struct allocated_fs *alloc_fs_record(void)
 {
     struct allocated_fs *rc = (struct allocated_fs *)
         malloc(sizeof(struct allocated_fs));
@@ -395,7 +410,11 @@ static int cap(lsm_plugin_ptr c, lsm_system * system,
                                   LSM_CAP_EXPORT_FS,
                                   LSM_CAP_EXPORT_REMOVE,
                                   LSM_CAP_VOLUME_RAID_INFO,
-                                  LSM_CAP_POOL_MEMBER_INFO, -1);
+                                  LSM_CAP_VOLUME_LED,
+                                  LSM_CAP_POOL_MEMBER_INFO,
+                                  LSM_CAP_BATTERIES,
+                                  LSM_CAP_VOLUME_CACHE_INFO,
+                                  -1);
 
         if (LSM_ERR_OK != rc) {
             lsm_capability_record_free(*cap);
@@ -502,6 +521,12 @@ static int list_systems(lsm_plugin_ptr c, lsm_system ** systems[],
     } else {
         return LSM_ERR_INVALID_ARGUMENT;
     }
+}
+
+static int system_read_cache_pct_update(lsm_plugin_ptr c, lsm_system * system,
+                                        uint32_t read_pct, lsm_flag flags)
+{
+    return LSM_ERR_OK;
 }
 
 static int job_free(lsm_plugin_ptr c, char *job_id, lsm_flag flags)
@@ -1042,11 +1067,34 @@ static int volume_raid_create(lsm_plugin_ptr c, const char *name,
     return LSM_ERR_NO_SUPPORT;
 }
 
+static int volume_ident_led_on(lsm_plugin_ptr c, lsm_volume * volume,
+                               lsm_flag flags)
+{
+    return LSM_ERR_OK;
+}
+
+static int volume_ident_led_off(lsm_plugin_ptr c, lsm_volume * volume,
+                                lsm_flag flags)
+{
+    return LSM_ERR_OK;
+}
+
 static struct lsm_ops_v1_2 ops_v1_2 = {
     volume_raid_info,
     pool_member_info,
     volume_raid_create_cap_get,
     volume_raid_create,
+};
+
+static struct lsm_ops_v1_3 ops_v1_3 = {
+    volume_ident_led_on,
+    volume_ident_led_off,
+    system_read_cache_pct_update,
+    lsm_battery_list,
+    lsm_volume_cache_info,
+    NULL, /* lsm_plug_volume_physical_disk_cache_update */
+    NULL, /* lsm_plug_volume_write_cache_policy_update */
+    NULL, /* lsm_plug_volume_read_cache_policy_update */
 };
 
 static int volume_enable_disable(lsm_plugin_ptr c, lsm_volume * v,
@@ -1114,14 +1162,15 @@ static int _find_dup_init(struct plugin_data *pd, const char *initiator_id)
     GList *all_aags = g_hash_table_get_values(pd->access_groups);
     guint y;
     int rc = 1;
+    uint32_t i = 0;
+
     for (y = 0; y < g_list_length(all_aags); ++y) {
         struct allocated_ag *cur_aag =
             (struct allocated_ag *) g_list_nth_data(all_aags, y);
         if (cur_aag) {
             lsm_string_list *inits =
                 lsm_access_group_initiator_id_get(cur_aag->ag);
-            int i;
-            for (i = 0; i < lsm_string_list_size(inits); ++i) {
+            for (; i < lsm_string_list_size(inits); ++i) {
                 const char *cur_init_id =
                     lsm_string_list_elem_get(inits, i);
                 if (strcmp(initiator_id, cur_init_id) == 0) {
@@ -1129,11 +1178,8 @@ static int _find_dup_init(struct plugin_data *pd, const char *initiator_id)
                     break;
                 }
             }
-            if (rc == 0) {
+            if (rc == 0)
                 break;
-            } else {
-                cur_aag = (struct allocated_ag *) g_list_next(all_aags);
-            }
         }
     }
     g_list_free(all_aags);
@@ -1567,7 +1613,7 @@ static int ag_granted_to_volume(lsm_plugin_ptr c,
     return rc;
 }
 
-int static volume_dependency(lsm_plugin_ptr c,
+static int volume_dependency(lsm_plugin_ptr c,
                              lsm_volume * volume,
                              uint8_t * yes, lsm_flag flags)
 {
@@ -2221,7 +2267,7 @@ void free_allocated_volume(void *v)
 
 static void _unload(struct plugin_data *pd)
 {
-    int i;
+    uint32_t i = 0;
 
     if (pd) {
 
@@ -2260,7 +2306,7 @@ static void _unload(struct plugin_data *pd)
             pd->pools = NULL;
         }
 
-        for (i = 0; i < pd->num_systems; ++i) {
+        for (; i < pd->num_systems; ++i) {
             lsm_system_record_free(pd->system[i]);
             pd->system[i] = NULL;
         }
@@ -2285,6 +2331,9 @@ int load(lsm_plugin_ptr c, const char *uri, const char *password,
                                                 "LSM simulated storage plug-in",
                                                 LSM_SYSTEM_STATUS_OK, "",
                                                 NULL);
+        lsm_system_fw_version_set(pd->system[0], version);
+        lsm_system_mode_set(pd->system[0], LSM_SYSTEM_MODE_HARDWARE_RAID);
+        lsm_system_read_cache_pct_set(pd->system[0], read_cache_pct);
 
         p = lsm_pool_record_alloc("POOL_3", "lsm_test_aggr",
                                   LSM_POOL_ELEMENT_TYPE_FS |
@@ -2350,6 +2399,9 @@ int load(lsm_plugin_ptr c, const char *uri, const char *password,
             d = lsm_disk_record_alloc(md5(name), name, LSM_DISK_TYPE_SOP,
                                       512, 0x8000000000000,
                                       LSM_DISK_STATUS_OK, sys_id);
+            lsm_disk_location_set(d, disk_location);
+            lsm_disk_rpm_set(d, LSM_DISK_RPM_NON_ROTATING_MEDIUM);
+            lsm_disk_link_type_set(d, LSM_DISK_LINK_TYPE_SAS);
 
             key = strdup(lsm_disk_id_get(d));
 
@@ -2377,8 +2429,9 @@ int load(lsm_plugin_ptr c, const char *uri, const char *password,
             _unload(pd);
             pd = NULL;
         } else {
-            rc = lsm_register_plugin_v1_2(c, pd, &mgm_ops, &san_ops,
-                                          &fs_ops, &nfs_ops, &ops_v1_2);
+            rc = lsm_register_plugin_v1_3(c, pd, &mgm_ops, &san_ops,
+                                          &fs_ops, &nfs_ops, &ops_v1_2,
+                                          &ops_v1_3);
         }
     }
     return rc;
@@ -2395,9 +2448,83 @@ int unload(lsm_plugin_ptr c, lsm_flag flags)
     }
 }
 
+static int lsm_battery_list(lsm_plugin_ptr c, const char *search_key,
+                            const char *search_value, lsm_battery ***bs,
+                            uint32_t *count, lsm_flag flags)
+{
+    int rc = LSM_ERR_OK;
+    lsm_battery *bat1 = NULL;
+    lsm_battery *bat2 = NULL;
+
+    *count = 0;
+    *bs = NULL;
+
+    bat1 = lsm_battery_record_alloc("BATTERY_ID_00001", "Battery SIMB01, "
+                                    "8000 mAh, 05 March 2016",
+                                    LSM_BATTERY_TYPE_CHEMICAL,
+                                    LSM_BATTERY_STATUS_OK,
+                                    sys_id, NULL);
+    if (bat1 == NULL)
+        return LSM_ERR_NO_MEMORY;
+
+    bat2 = lsm_battery_record_alloc("BATTERY_ID_00002", "Capacitor SIMC01, "
+                                    "500 J, 05 March 2016",
+                                    LSM_BATTERY_TYPE_CAPACITOR,
+                                    LSM_BATTERY_STATUS_OK,
+                                    sys_id, NULL);
+    if (bat2 == NULL) {
+        lsm_battery_record_free(bat1);
+        return LSM_ERR_NO_MEMORY;
+    }
+
+    *count = 2;
+    *bs = lsm_battery_record_array_alloc(2);
+    if (*bs == NULL) {
+        *count = 0;
+        lsm_battery_record_free(bat1);
+        lsm_battery_record_free(bat2);
+        return LSM_ERR_NO_MEMORY;
+    }
+
+    (*bs)[0] = bat1;
+    (*bs)[1] = bat2;
+
+    if (LSM_ERR_OK == rc) {
+        lsm_plug_battery_search_filter(search_key, search_value, *bs,
+                                       count);
+    }
+
+    return rc;
+}
+
+static int lsm_volume_cache_info(lsm_plugin_ptr c, lsm_volume *volume,
+                                 uint32_t *write_cache_policy,
+                                 uint32_t *write_cache_status,
+                                 uint32_t *read_cache_policy,
+                                 uint32_t *read_cache_status,
+                                 uint32_t *physical_disk_cache, lsm_flag flags)
+{
+    int rc = LSM_ERR_OK;
+    struct plugin_data *pd = (struct plugin_data *) lsm_private_data_get(c);
+    struct allocated_volume *av =
+        find_volume(pd, lsm_volume_id_get(volume));
+
+    if (!av) {
+        rc = lsm_log_error_basic(c, LSM_ERR_NOT_FOUND_VOLUME,
+                                 "volume not found!");
+    }
+
+    *write_cache_policy = LSM_VOLUME_WRITE_CACHE_POLICY_AUTO;
+    *write_cache_status = LSM_VOLUME_WRITE_CACHE_STATUS_WRITE_BACK;
+    *read_cache_policy = LSM_VOLUME_READ_CACHE_POLICY_ENABLED;
+    *read_cache_status = LSM_VOLUME_READ_CACHE_STATUS_ENABLED;
+    *physical_disk_cache = LSM_VOLUME_PHYSICAL_DISK_CACHE_ENABLED;
+    return rc;
+}
+
 int main(int argc, char *argv[])
 {
-    return lsm_plugin_init_v1(argc, argv, load, unload, name, version);
+    return lsm_plugin_init_v1(argc, argv, load, unload, PLUGIN_NAME, version);
 }
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
-# Copyright (C) 2013-2014 Red Hat, Inc.
+# Copyright (C) 2013-2016 Red Hat, Inc.
+# (C) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -13,6 +14,10 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; If not, see <http://www.gnu.org/licenses/>.
+#
+# Author:   tasleson
+#           Joe Handzik <joseph.t.handzik@hpe.com>
+#           Gris Ge <fge@redhat.com>
 
 import lsm
 import functools
@@ -25,7 +30,6 @@ import argparse
 import collections
 import atexit
 import sys
-import re
 import os
 import tempfile
 from lsm import LsmError, ErrorNumber
@@ -37,6 +41,14 @@ stats = {}
 
 MIN_POOL_SIZE = 4096
 MIN_OBJECT_SIZE = 512
+
+
+# If you print anything during execution make sure it's to stderr as the
+# automated tests are making the assumption that test messages go to stderr and
+# execution information gets written to stdout as yaml
+def print_stderr(msg):
+    sys.stderr.write(msg)
+    sys.stderr.flush()
 
 
 def mb_in_bytes(mib):
@@ -295,16 +307,136 @@ class TestPlugin(unittest.TestCase):
                     rc = p
         return rc
 
+    def _clean_up(self):
+
+        # Note: We make best effort to clean things up, thus we are ignoring
+        # exceptions in this code, depending on what's failing in the plugin
+        # we may not be able to remove something we created
+        try:
+            for s in self.systems:
+                cap = self.c.capabilities(s)
+
+                # Remove any access groups we created, removing any mappings
+                # first.
+                if supported(cap, [Cap.ACCESS_GROUP_DELETE,
+                                   Cap.VOLUMES_ACCESSIBLE_BY_ACCESS_GROUP]):
+                    for ag in self.c.access_groups():
+                        if 'lsm_' in ag.name and s.id == ag.system_id:
+                            try:
+                                # Make sure it doesn't have any mappings
+                                mapped_volume = self.c.\
+                                    volumes_accessible_by_access_group(ag)
+
+                                # Remove any mappings
+                                for vol in mapped_volume:
+                                    self.c.volume_unmask(ag, vol)
+
+                                # Lastly, remove the access group
+                                self.c.access_group_delete(ag)
+                            except LsmError as le:
+                                print_stderr("[WARNING] error when "
+                                             "removing ag %s\n" % str(le))
+                                pass
+
+                # Remove any volumes we created
+                if supported(cap, [Cap.VOLUME_DELETE]):
+                    for v in self.c.volumes():
+                        if 'lsm_' in v.name and s.id == v.system_id:
+                            # Check to see if this volume is participating in
+                            # an access group, if it is we will remove the
+                            # volume from it, but we will not delete the access
+                            # group as we likely didn't create it
+                            access_groups = self.c.\
+                                access_groups_granted_to_volume(v)
+                            for ag in access_groups:
+                                try:
+                                    self.c.volume_unmask(ag, v)
+                                except LsmError as le:
+                                    print_stderr(
+                                        "[WARNING] error when unmasking "
+                                        "volume %s\n" % str(le))
+                                    pass
+                            try:
+                                self.c.volume_delete(v)
+                            except LsmError as le:
+                                print_stderr("[WARNING] error when removing "
+                                             "volume %s\n" % str(le))
+                                pass
+
+                # Remove any fs exports we created
+                if supported(cap, [Cap.FS, Cap.EXPORTS, Cap.EXPORT_REMOVE]):
+
+                    # Get all the FS
+                    fs_list = self.c.fs()
+
+                    for e_fs in self.c.exports():
+                        # Get the fs object that is exported
+                        fs = [x for x in fs_list if x.id == e_fs.fs_id][0]
+
+                        # Make sure we are un-exporting a FS we created
+                        if 'lsm_' in fs.name and s.id == fs.system_id:
+                            try:
+                                self.c.export_remove(e_fs)
+                            except LsmError as le:
+                                print_stderr("[WARNING] error when removing "
+                                             "export %s\n" % str(le))
+                                pass
+
+                # Remove any fs we created
+                if supported(cap, [Cap.FS, Cap.FS_DELETE]):
+                    for f in self.c.fs():
+                        if 'lsm_' in f.name and s.id == f.system_id:
+                            try:
+                                self.c.fs_delete(f)
+                            except LsmError as le:
+                                print_stderr("[WARNING] error when removing "
+                                             "fs %s\n" % str(le))
+                                pass
+
+        except Exception as e:
+            print_stderr("[WARNING] exception in _clean_ip %s\n" % str(e))
+            pass
+
     def tearDown(self):
-        # TODO Walk the array looking for stuff we have created and remove it
-        # What should we do if an array supports a create operation, but not
-        # the corresponding remove?
+        self._clean_up()
         self.c.close()
 
     def test_plugin_info(self):
         (desc, version) = self.c.plugin_info()
         self.assertTrue(desc is not None and len(desc) > 0)
         self.assertTrue(version is not None and len(version) > 0)
+
+    def test_fw_version_get(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.SYS_FW_VERSION_GET]):
+                fw_ver = s.fw_version
+                self.assertTrue(fw_ver is not None and len(fw_ver) > 0,
+                                "Firmware version retrieval failed")
+
+    def test_sys_mode_get(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.SYS_MODE_GET]):
+                sys_mode = s.mode
+                self.assertTrue(sys_mode is not None,
+                                "System mode retrieval failed")
+
+    def test_sys_read_cache_pct_get(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.SYS_READ_CACHE_PCT_GET]):
+                read_pct = s.read_cache_pct
+                self.assertTrue(read_pct is not None,
+                                "Read cache percentage retrieval failed")
+
+    def test_system_read_cache_pct_update(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.SYS_READ_CACHE_PCT_UPDATE]):
+                cache_status = self.c.system_read_cache_pct_update(s, 100)
+                self.assertTrue(cache_status is None,
+                                "system_read_cache_pct_update failed")
 
     def test_timeout(self):
         tmo = 40000
@@ -363,6 +495,24 @@ class TestPlugin(unittest.TestCase):
                 disks = self.c.disks()
                 self.assertTrue(len(disks) > 0,
                                 "We need at least 1 disk to test")
+                if supported(cap, [Cap.DISK_VPD83_GET]):
+                    try:
+                        list(disk.vpd83 for disk in disks)
+                        list(disk.rpm for disk in disks)
+                        list(disk.link_type for disk in disks)
+                    except LsmError as lsm_err:
+                        if lsm_err.code != ErrorNumber.NO_SUPPORT:
+                            raise
+
+    def test_disk_location_get(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.DISK_LOCATION]):
+                for disk in self.c.disks():
+                    disk_location = disk.location
+                    self.assertTrue(disk_location is not None and
+                                    len(disk_location) > 0,
+                                    "Disk location retrieval failed")
 
     def _volume_create(self, system_id,
                        element_type=lsm.Pool.ELEMENT_TYPE_VOLUME,
@@ -381,6 +531,8 @@ class TestPlugin(unittest.TestCase):
 
                 self.assertTrue(self._volume_exists(vol.id), p.id)
                 self.assertTrue(vol.pool_id == p.id)
+                self.assertTrue(vol.system_id == p.system_id)
+
                 return vol, p
 
     def _fs_create(self, system_id):
@@ -395,10 +547,13 @@ class TestPlugin(unittest.TestCase):
             if pool is not None:
                 fs_size = self._object_size(pool)
                 fs = self.c.fs_create(pool, rs('fs'), fs_size)[1]
-                self.assertTrue(self._fs_exists(fs.id))
 
                 self.assertTrue(fs is not None)
-                self.assertTrue(pool is not None)
+
+                if fs:
+                    self.assertTrue(self._fs_exists(fs.id))
+                    self.assertTrue(self._system_exists(fs.system_id))
+                    self.assertTrue(pool.system_id == fs.system_id)
 
             return fs, pool
 
@@ -434,6 +589,15 @@ class TestPlugin(unittest.TestCase):
 
         for f in fs:
             if f.id == fs_id:
+                return True
+
+        return False
+
+    def _system_exists(self, system_id):
+        systems = self.c.systems()
+
+        for s in systems:
+            if s.id == system_id:
                 return True
 
         return False
@@ -504,9 +668,11 @@ class TestPlugin(unittest.TestCase):
                             rs('v_c_'))[1]
 
                         self.assertTrue(volume_clone is not None)
-                        self.assertTrue(self._volume_exists(volume_clone.id))
 
-                        if volume_clone is not None:
+                        if volume_clone:
+                            self.assertTrue(
+                                self._volume_exists(volume_clone.id))
+
                             # Lets test for creating a clone with an
                             # existing name
                             error_num = None
@@ -678,9 +844,9 @@ class TestPlugin(unittest.TestCase):
             match = [x for x in vol_masked if x.id == vol.id]
 
             if masked:
-                self.assertTrue(len(match) == 1)
+                self.assertTrue(len(match) == 1, "len = %d" % len(match))
             else:
-                self.assertTrue(len(match) == 0)
+                self.assertTrue(len(match) == 0, "len = %d" % len(match))
 
         if supported(cap,
                      [Cap.
@@ -691,9 +857,9 @@ class TestPlugin(unittest.TestCase):
             match = [x for x in ag_masked if x.id == ag.id]
 
             if masked:
-                self.assertTrue(len(match) == 1)
+                self.assertTrue(len(match) == 1, "len = %d" % len(match))
             else:
-                self.assertTrue(len(match) == 0)
+                self.assertTrue(len(match) == 0, "len = %d" % len(match))
 
     def test_mask_unmask(self):
         for s in self.systems:
@@ -764,6 +930,8 @@ class TestPlugin(unittest.TestCase):
                         self._volume_delete(vol)
 
                 if ag_created:
+                    self.assertTrue(s.id == ag_created.system_id)
+
                     self.c.access_group_delete(ag_created)
                     ag_created = None
 
@@ -790,6 +958,8 @@ class TestPlugin(unittest.TestCase):
             self.assertTrue(len(match) == 1, "Newly created access group %s "
                                              "not in the access group listing"
                                              % (ag_created.name))
+
+            self.assertTrue(s.id == ag_created.system_id)
 
         return ag_created
 
@@ -861,13 +1031,15 @@ class TestPlugin(unittest.TestCase):
                 ag = self._create_access_group(
                     cap, rs('ag'), s, lsm.AccessGroup.INIT_TYPE_ISCSI_IQN)
 
-                self.c.iscsi_chap_auth(ag.init_ids[0], 'foo', rs(None, 12),
-                                       None, None)
+                self.assertTrue(ag is not None)
 
-                if ag is not None and \
-                   supported(cap, [Cap.ACCESS_GROUP_DELETE]):
-                    self._test_ag_create_dup(ag, s)
-                    self._delete_access_group(ag)
+                if ag:
+                    self.c.iscsi_chap_auth(ag.init_ids[0], 'foo', rs(None, 12),
+                                           None, None)
+
+                    if supported(cap, [Cap.ACCESS_GROUP_DELETE]):
+                        self._test_ag_create_dup(ag, s)
+                        self._delete_access_group(ag)
 
     def test_access_group_create_delete(self):
         for s in self.systems:
@@ -900,7 +1072,9 @@ class TestPlugin(unittest.TestCase):
             t_id = r_fcpn()
             t = lsm.AccessGroup.INIT_TYPE_WWPN
 
-        self.c.access_group_initiator_add(ag, t_id, t)
+        ag_add = self.c.access_group_initiator_add(ag, t_id, t)
+
+        self.assertTrue(ag_add.system_id == ag.system_id)
 
         ag_after = self.c.access_groups('id', ag.id)[0]
         match = [x for x in ag_after.init_ids if x == t_id]
@@ -1343,6 +1517,208 @@ class TestPlugin(unittest.TestCase):
             else:
                 self._skip_current_test(
                     "Skip test: not support of VOLUME_RAID_CREATE")
+
+    def test_volume_raid_info(self):
+        flag_supported = False
+        pool_id_to_lsm_vols = dict()
+        created_lsm_vol = None
+
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.VOLUME_RAID_INFO]):
+                flag_supported = True
+        if flag_supported is False:
+            self._skip_current_test(
+                "Skip test: current system does not support "
+                "query volume raid info(lsm.Capabilities.VOLUME_RAID_INFO)")
+
+        # Try to find a volume per pool.
+        lsm_vols = self.c.volumes()
+        for lsm_vol in lsm_vols:
+            pool_id = lsm_vol.pool_id
+            if len(pool_id) != 0 and \
+               pool_id_to_lsm_vols.get(pool_id) is None:
+                pool_id_to_lsm_vols[pool_id] = lsm_vol
+
+        lsm_vols = pool_id_to_lsm_vols.values()
+        created_lsm_vol = self._volume_create(s.id)[0]
+        lsm_vols.append(created_lsm_vol)
+
+        for lsm_vol in lsm_vols:
+            [raid_type, strip_size, disk_count, min_io_size, opt_io_size] = \
+                self.c.volume_raid_info(lsm_vol)
+
+        # Test NOT_FOUND_VOLUME error.
+        self._volume_delete(created_lsm_vol)
+        try:
+            self.c.volume_raid_info(lsm_vol)
+        except lsm.LsmError as le:
+            if le.code != ErrorNumber.NOT_FOUND_VOLUME:
+                raise
+
+    def test_volume_ident_led_on(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.VOLUME_LED]):
+                for volume in self.c.volumes():
+                    volume_led_status = self.c.volume_ident_led_on(volume)
+                    self.assertTrue(volume_led_status is None,
+                                    "Volume ident_led_on"
+                                    "failed")
+
+    def test_volume_ident_led_off(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.VOLUME_LED]):
+                for volume in self.c.volumes():
+                    volume_led_status = self.c.volume_ident_led_off(volume)
+                    self.assertTrue(volume_led_status is None,
+                                    "Volume ident_led_off"
+                                    "failed")
+
+    def test_invalid_uri(self):
+
+        # Make sure we are getting an exception
+        with self.assertRaises(lsm.LsmError):
+            lsm.Client("ontap//root@na-sim", "some_password")
+
+        # Make sure exception has the correct error code
+        try:
+            lsm.Client("ontap//root@na-sim", "some_password")
+        except lsm.LsmError as le:
+            self.assertTrue(le.code == lsm.ErrorNumber.INVALID_ARGUMENT)
+
+    def test_battery_list(self):
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if supported(cap, [Cap.BATTERIES]):
+                self.c.batteries()
+
+    def test_volume_cache_info(self):
+        flag_tested = False
+        flag_created = False
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if not supported(cap, [Cap.VOLUME_CACHE_INFO]):
+                continue
+
+            lsm_vols = self.c.volumes(search_key='system_id',
+                                      search_value=s.id)
+            if len(lsm_vols) == 0:
+                if not supported(cap, [Cap.VOLUME_CREATE, Cap.VOLUME_DELETE]):
+                    continue
+                lsm_vol = self._volume_create(s.id)[0]
+                flag_created = True
+            else:
+                lsm_vol = lsm_vols[0]
+            cache_info = self.c.volume_cache_info(lsm_vol)
+            self.assertTrue(len(cache_info) == 5)
+            if flag_created:
+                self._volume_delete(lsm_vol)
+            flag_tested = True
+
+        if flag_tested is False:
+            self._skip_current_test(
+                "Skip test: no storage system support volume cache info query")
+
+    def test_volume_cache_pdc_update(self):
+        flag_tested = False
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if not supported(cap,
+                             [Cap.VOLUME_CACHE_INFO, Cap.VOLUME_CREATE,
+                              Cap.VOLUME_DELETE,
+                              Cap.VOLUME_PHYSICAL_DISK_CACHE_UPDATE]):
+                continue
+            lsm_vol = self._volume_create(s.id)[0]
+            self.c.volume_physical_disk_cache_update(
+                lsm_vol, lsm.Volume.PHYSICAL_DISK_CACHE_ENABLED)
+            cache_info = self.c.volume_cache_info(lsm_vol)
+            self.assertTrue(cache_info[4] ==
+                            lsm.Volume.PHYSICAL_DISK_CACHE_ENABLED)
+            self.c.volume_physical_disk_cache_update(
+                lsm_vol, lsm.Volume.PHYSICAL_DISK_CACHE_DISABLED)
+            cache_info = self.c.volume_cache_info(lsm_vol)
+            self.assertTrue(cache_info[4] ==
+                            lsm.Volume.PHYSICAL_DISK_CACHE_DISABLED)
+
+            self._volume_delete(lsm_vol)
+            flag_tested = True
+        if flag_tested is False:
+            self._skip_current_test(
+                "Skip test: current system does not support required "
+                "capabilities for testing volume_physical_disk_cache_update()")
+
+    def test_volume_cache_wcp_update(self):
+        flag_tested = False
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if not supported(cap,
+                             [Cap.VOLUME_CACHE_INFO, Cap.VOLUME_CREATE,
+                              Cap.VOLUME_DELETE]):
+                continue
+            lsm_vol = self._volume_create(s.id)[0]
+
+            if supported(cap,
+                         [Cap.VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_BACK]):
+                self.c.volume_write_cache_policy_update(
+                    lsm_vol, lsm.Volume.WRITE_CACHE_POLICY_WRITE_BACK)
+                cache_info = self.c.volume_cache_info(lsm_vol)
+                self.assertTrue(cache_info[0] ==
+                                lsm.Volume.WRITE_CACHE_POLICY_WRITE_BACK)
+                flag_tested = True
+
+            if supported(cap, [Cap.VOLUME_WRITE_CACHE_POLICY_UPDATE_AUTO]):
+                self.c.volume_write_cache_policy_update(
+                    lsm_vol, lsm.Volume.WRITE_CACHE_POLICY_AUTO)
+                cache_info = self.c.volume_cache_info(lsm_vol)
+                self.assertTrue(cache_info[0] ==
+                                lsm.Volume.WRITE_CACHE_POLICY_AUTO)
+                flag_tested = True
+
+            if supported(cap,
+                         [Cap.VOLUME_WRITE_CACHE_POLICY_UPDATE_WRITE_THROUGH]):
+                self.c.volume_write_cache_policy_update(
+                    lsm_vol, lsm.Volume.WRITE_CACHE_POLICY_WRITE_THROUGH)
+                cache_info = self.c.volume_cache_info(lsm_vol)
+                self.assertTrue(cache_info[0] ==
+                                lsm.Volume.WRITE_CACHE_POLICY_WRITE_THROUGH)
+                flag_tested = True
+
+            self._volume_delete(lsm_vol)
+
+        if flag_tested is False:
+            self._skip_current_test(
+                "Skip test: current system does not support required "
+                "capabilities for testing volume_write_cache_policy_update()")
+
+    def test_volume_cache_rcp_update(self):
+        flag_tested = False
+        for s in self.systems:
+            cap = self.c.capabilities(s)
+            if not supported(cap,
+                             [Cap.VOLUME_CACHE_INFO, Cap.VOLUME_CREATE,
+                              Cap.VOLUME_DELETE,
+                              Cap.VOLUME_READ_CACHE_POLICY_UPDATE]):
+                continue
+            lsm_vol = self._volume_create(s.id)[0]
+            self.c.volume_read_cache_policy_update(
+                lsm_vol, lsm.Volume.READ_CACHE_POLICY_ENABLED)
+            cache_info = self.c.volume_cache_info(lsm_vol)
+            self.assertTrue(cache_info[2] ==
+                            lsm.Volume.READ_CACHE_POLICY_ENABLED)
+            self.c.volume_read_cache_policy_update(
+                lsm_vol, lsm.Volume.READ_CACHE_POLICY_DISABLED)
+            cache_info = self.c.volume_cache_info(lsm_vol)
+            self.assertTrue(cache_info[2] ==
+                            lsm.Volume.READ_CACHE_POLICY_DISABLED)
+
+            self._volume_delete(lsm_vol)
+            flag_tested = True
+        if flag_tested is False:
+            self._skip_current_test(
+                "Skip test: current system does not support required "
+                "capabilities for testing volume_read_cache_policy_update()")
 
 
 def dump_results():

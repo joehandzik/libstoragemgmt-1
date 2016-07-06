@@ -29,7 +29,8 @@ extern "C" {
 /**
  * Free the memory for a disk record
  * @param d     Disk memory to free
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_disk_record_free(lsm_disk *d);
 
@@ -44,7 +45,8 @@ lsm_disk LSM_DLL_EXPORT *lsm_disk_record_copy(lsm_disk *d);
  * Free an array of disk records
  * @param disk      Array of disk records
  * @param size      Size of disk array
- * @return LSM_ERR_OK on success, else error reason.
+ * @return Error code as enumerated by \ref lsm_error_number.
+ * @retval LSM_ERR_OK on success.
  */
 int LSM_DLL_EXPORT lsm_disk_record_array_free(lsm_disk *disk[],
                                               uint32_t size);
@@ -104,6 +106,69 @@ uint64_t LSM_DLL_EXPORT lsm_disk_block_size_get(lsm_disk *d);
 uint64_t LSM_DLL_EXPORT lsm_disk_status_get(lsm_disk *d);
 
 /**
+ * New in version 1.3.
+ * Retrieves a disk's location.
+ * Do not free returned string, free the struct lsm_disk instead.
+ * @param d     Pointer to the disk of interest.
+ * @return Disk location string. Return NULL if invalid argument, no support or
+ * bug.
+ */
+LSM_DLL_EXPORT const char *lsm_disk_location_get(lsm_disk *d);
+
+/**
+ * New in version 1.3.
+ * Retrieves a disk's rotation speed(revolutions per minute).
+ * @param d     Pointer to the disk of interest.
+ * @return Disk rotation speed - revolutions per minute(RPM).
+ * @retval >1
+ *              Normal rotational disk.
+ * @retval LSM_DISK_RPM_NO_SUPPORT
+ *              Not supported by plugin.
+ * @retval LSM_DISK_RPM_NON_ROTATING_MEDIUM
+ *              Non-rotating medium (e.g., SSD).
+ * @retval LSM_DISK_RPM_ROTATING_UNKNOWN_SPEED
+ *              Rotational disk with unknown speed.
+ * @retval LSM_DISK_RPM_UNKNOWN
+ *              Bug or invalid argument.
+ */
+int32_t LSM_DLL_EXPORT lsm_disk_rpm_get(lsm_disk *d);
+
+/**
+ * New in version 1.3.
+ * Retrieves a disk link type.
+ * @param d             Pointer to the disk of interest.
+ * @return Disk link type - lsm_disk_link_type
+ * @retval LSM_DISK_LINK_TYPE_NO_SUPPORT
+ *              Plugin does not support this property.
+ * @retval LSM_DISK_LINK_TYPE_UNKNOWN
+ *              Given 'd' argument is NULL or plugin failed to detect link type.
+ * @retval LSM_DISK_LINK_TYPE_FC
+ *              Fibre Channel
+ * @retval LSM_DISK_LINK_TYPE_SSA
+ *              Serial Storage Architecture, Old IBM tech.
+ * @retval LSM_DISK_LINK_TYPE_SBP
+ *              Serial Bus Protocol, used by IEEE 1394.
+ * @retval LSM_DISK_LINK_TYPE_SRP
+ *              SCSI RDMA Protocol
+ * @retval LSM_DISK_LINK_TYPE_ISCSI
+ *              Internet Small Computer System Interface
+ * @retval LSM_DISK_LINK_TYPE_SAS
+ *              Serial Attached SCSI
+ * @retval LSM_DISK_LINK_TYPE_ADT
+ *              Automation/Drive Interface Transport Protocol, often used by
+ *              Tape.
+ * @retval LSM_DISK_LINK_TYPE_ATA
+ *              PATA/IDE or SATA.
+ * @retval LSM_DISK_LINK_TYPE_USB
+ *              USB disk
+ * @retval LSM_DISK_LINK_TYPE_SOP
+ *              SCSI over PCI-E
+ * @retval LSM_DISK_LINK_TYPE_PCIE
+ *              PCI-E, e.g. NVMe
+ */
+lsm_disk_link_type LSM_DLL_EXPORT lsm_disk_link_type_get(lsm_disk *d);
+
+/**
  * Returns the system id
  * Note: Return value is valid as long as disk pointer is valid.  It gets
  * freed when record is freed.
@@ -111,6 +176,21 @@ uint64_t LSM_DLL_EXPORT lsm_disk_status_get(lsm_disk *d);
  * @return Which system the disk belongs too.
  */
 const char LSM_DLL_EXPORT *lsm_disk_system_id_get(lsm_disk *d);
+
+/**
+ * News in version 1.3. Only available for direct attached storage system.
+ * Returns the SCSI VPD83 NAA ID of disk. The VPD83 NAA ID could be used in
+ * 'lsm_local_disk_vpd83_search()' when physical disk is exposed to OS directly
+ * (also known as system HBA mode). Please be advised the capability
+ * LSM_CAP_DISK_VPD83_GET only means plugin could query VPD83 for HBA mode disk,
+ * for those physical disks acting as RAID member, plugin might return NULL as
+ * their VPD83 NAA ID.
+ * Note: Return value is valid as long as disk pointer is valid.  It gets
+ * freed when record is freed.
+ * @param d     Disk record of interest
+ * @return string pointer of vpd83 NAA ID. NULL if not support or error.
+ */
+const char LSM_DLL_EXPORT *lsm_disk_vpd83_get(lsm_disk *d);
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2011-2014 Red Hat, Inc.
+ * Copyright (C) 2011-2016 Red Hat, Inc.
+ * (C) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -14,12 +15,22 @@
  * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
+ *         Joe Handzik <joseph.t.handzik@hpe.com>
+ *         Gris Ge <fge@redhat.com>
  */
 
 #include "lsm_convert.hpp"
 #include "libstoragemgmt/libstoragemgmt_accessgroups.h"
 #include "libstoragemgmt/libstoragemgmt_blockrange.h"
 #include "libstoragemgmt/libstoragemgmt_nfsexport.h"
+#include "libstoragemgmt/libstoragemgmt_plug_interface.h"
+#include "libstoragemgmt/libstoragemgmt_battery.h"
+
+
+bool std_map_has_key(const std::map < std::string, Value > &x, const char *key)
+{
+    return x.find(key) != x.end();
+}
 
 bool is_expected_object(Value & obj, std::string class_name)
 {
@@ -135,6 +146,45 @@ lsm_disk *value_to_disk(Value & disk)
                                    d["status"].asUint64_t(),
                                    d["system_id"].asString().c_str()
             );
+        if ((rc != NULL) && std_map_has_key(d, "vpd83") &&
+            (d["vpd83"].asC_str()[0] != '\0' ) &&
+            (lsm_disk_vpd83_set(rc, d["vpd83"].asC_str()) != LSM_ERR_OK)) {
+
+            lsm_disk_record_free(rc);
+            rc= NULL;
+            throw ValueException("value_to_disk: failed to update 'vpd83'");
+        }
+
+        if ((rc != NULL) && std_map_has_key(d, "location") &&
+            (d["location"].asC_str()[0] != '\0')) {
+
+            if (lsm_disk_location_set(rc, d["location"].asC_str()) !=
+                LSM_ERR_OK) {
+                lsm_disk_record_free(rc);
+                rc = NULL;
+                throw ValueException("value_to_disk: failed to update "
+                                     "location");
+            }
+        }
+        if ((rc != NULL) && std_map_has_key(d, "rpm") &&
+            (d["rpm"].asInt32_t() != LSM_DISK_RPM_NO_SUPPORT)) {
+            if (lsm_disk_rpm_set(rc, d["rpm"].asInt32_t()) != LSM_ERR_OK) {
+                lsm_disk_record_free(rc);
+                rc = NULL;
+                throw ValueException("value_to_disk: failed to update rpm");
+            }
+        }
+        if ((rc != NULL) && std_map_has_key(d, "link_type") &&
+            (d["link_type"].asInt32_t() != LSM_DISK_LINK_TYPE_NO_SUPPORT)) {
+            if (lsm_disk_link_type_set(rc, (lsm_disk_link_type)
+                                       d["link_type"].asInt32_t()) !=
+                LSM_ERR_OK) {
+                lsm_disk_record_free(rc);
+                rc = NULL;
+                throw ValueException("value_to_disk: failed to update "
+                                     "link_type");
+            }
+        }
     } else {
         throw ValueException("value_to_disk: Not correct type");
     }
@@ -149,11 +199,17 @@ Value disk_to_value(lsm_disk * disk)
         d["class"] = Value(CLASS_NAME_DISK);
         d["id"] = Value(disk->id);
         d["name"] = Value(disk->name);
-        d["disk_type"] = Value(disk->disk_type);
+        d["disk_type"] = Value(disk->type);
         d["block_size"] = Value(disk->block_size);
-        d["num_of_blocks"] = Value(disk->block_count);
-        d["status"] = Value(disk->disk_status);
+        d["num_of_blocks"] = Value(disk->number_of_blocks);
+        d["status"] = Value(disk->status);
         d["system_id"] = Value(disk->system_id);
+        if (disk->location != NULL)
+            d["location"] = Value(disk->location);
+        if (disk->rpm != LSM_DISK_RPM_NO_SUPPORT)
+            d["rpm"] = Value(disk->rpm);
+        if (disk->link_type != LSM_DISK_LINK_TYPE_NO_SUPPORT)
+            d["link_type"] = Value(disk->link_type);
 
         return Value(d);
     }
@@ -260,6 +316,38 @@ lsm_system *value_to_system(Value & system)
                                      i["status"].asUint32_t(),
                                      i["status_info"].asString().c_str(),
                                      i["plugin_data"].asC_str());
+        if ((rc != NULL) && std_map_has_key(i, "fw_version") &&
+            (i["fw_version"].asC_str()[0] != '\0')) {
+
+            if (lsm_system_fw_version_set(rc, i["fw_version"].asC_str()) !=
+                LSM_ERR_OK) {
+                lsm_system_record_free(rc);
+                rc= NULL;
+                throw ValueException("value_to_system: failed to update "
+                                     "fw_version");
+            }
+        }
+        if ((rc != NULL) && std_map_has_key(i, "mode") &&
+            (i["mode"].asInt32_t() != LSM_SYSTEM_MODE_NO_SUPPORT) &&
+            (lsm_system_mode_set(rc, (lsm_system_mode_type)
+                                 i["mode"].asInt32_t()))) {
+
+            lsm_system_record_free(rc);
+            rc= NULL;
+            throw ValueException("value_to_system: failed to update 'mode'");
+        }
+        if ((rc != NULL) && std_map_has_key(i, "read_cache_pct") &&
+            (i["read_cache_pct"].asInt32_t() !=
+            LSM_SYSTEM_READ_CACHE_PCT_NO_SUPPORT)) {
+
+            if (lsm_system_read_cache_pct_set(rc,
+                i["read_cache_pct"].asInt32_t()) != LSM_ERR_OK) {
+                lsm_system_record_free(rc);
+                rc= NULL;
+                throw ValueException("value_to_system: failed to update "
+                                     "read_cache_pct");
+            }
+        }
     } else {
         throw ValueException("value_to_system: Not correct type");
     }
@@ -276,6 +364,12 @@ Value system_to_value(lsm_system * system)
         s["status"] = Value(system->status);
         s["status_info"] = Value(system->status_info);
         s["plugin_data"] = Value(system->plugin_data);
+        if (system->fw_version != NULL)
+            s["fw_version"] = Value(system->fw_version);
+        if (system->mode != LSM_SYSTEM_MODE_NO_SUPPORT)
+            s["mode"] = Value(system->mode);
+        if (system->read_cache_pct != LSM_SYSTEM_READ_CACHE_PCT_NO_SUPPORT)
+            s["read_cache_pct"] = Value(system->read_cache_pct);
         return Value(s);
     }
     return Value();
@@ -541,7 +635,7 @@ Value ss_to_value(lsm_fs_ss * ss)
         f["class"] = Value(CLASS_NAME_FS_SNAPSHOT);
         f["id"] = Value(ss->id);
         f["name"] = Value(ss->name);
-        f["ts"] = Value(ss->ts);
+        f["ts"] = Value(ss->time_stamp);
         f["plugin_data"] = Value(ss->plugin_data);
         return Value(f);
     }
@@ -612,10 +706,10 @@ Value nfs_export_to_value(lsm_nfs_export * exp)
         f["export_path"] = Value(exp->export_path);
         f["auth"] = Value(exp->auth_type);
         f["root"] = Value(string_list_to_value(exp->root));
-        f["rw"] = Value(string_list_to_value(exp->rw));
-        f["ro"] = Value(string_list_to_value(exp->ro));
-        f["anonuid"] = Value(exp->anonuid);
-        f["anongid"] = Value(exp->anongid);
+        f["rw"] = Value(string_list_to_value(exp->read_write));
+        f["ro"] = Value(string_list_to_value(exp->read_only));
+        f["anonuid"] = Value(exp->anon_uid);
+        f["anongid"] = Value(exp->anon_gid);
         f["options"] = Value(exp->options);
         f["plugin_data"] = Value(exp->plugin_data);
         return Value(f);
@@ -638,7 +732,7 @@ lsm_storage_capabilities *value_to_capabilities(Value & exp)
 
 Value capabilities_to_value(lsm_storage_capabilities * cap)
 {
-    if (LSM_IS_CAPABILITIY(cap)) {
+    if (LSM_IS_CAPABILITY(cap)) {
         std::map < std::string, Value > c;
         char *t = capability_string(cap);
         c["class"] = Value(CLASS_NAME_CAPABILITIES);
@@ -675,7 +769,7 @@ Value target_port_to_value(lsm_target_port * tp)
         std::map < std::string, Value > p;
         p["class"] = Value(CLASS_NAME_TARGET_PORT);
         p["id"] = Value(tp->id);
-        p["port_type"] = Value(tp->port_type);
+        p["port_type"] = Value(tp->type);
         p["service_address"] = Value(tp->service_address);
         p["network_address"] = Value(tp->network_address);
         p["physical_address"] = Value(tp->physical_address);
@@ -729,4 +823,85 @@ Value uint32_array_to_value(uint32_t * uint32_array, uint32_t count)
         }
     }
     return rc;
+}
+
+lsm_battery *value_to_battery(Value &battery)
+{
+    lsm_battery *rc = NULL;
+    if (is_expected_object(battery, CLASS_NAME_BATTERY)) {
+        std::map < std::string, Value > b = battery.asObject();
+
+        rc = lsm_battery_record_alloc(b["id"].asString().c_str(),
+                                      b["name"].asString().c_str(),
+                                      (lsm_battery_type) b["type"].asInt32_t(),
+                                      b["status"].asUint64_t(),
+                                      b["system_id"].asString().c_str(),
+                                      b["plugin_data"].asString().c_str());
+    } else {
+        throw ValueException("value_to_battery: Not correct type");
+    }
+    return rc;
+}
+
+Value battery_to_value(lsm_battery *battery)
+{
+    if (LSM_IS_BATTERY(battery)) {
+        std::map < std::string, Value > b;
+        b["class"] = Value(CLASS_NAME_BATTERY);
+        b["id"] = Value(battery->id);
+        b["name"] = Value(battery->name);
+        b["type"] = Value(battery->type);
+        b["status"] = Value(battery->status);
+        b["system_id"] = Value(battery->system_id);
+        if (battery->plugin_data != NULL)
+            b["plugin_data"] = Value(battery->plugin_data);
+        return Value(b);
+    }
+    return Value();
+}
+
+int value_array_to_batteries(Value &battery_values, lsm_battery ***bs,
+                             uint32_t *count)
+{
+    int rc = LSM_ERR_OK;
+    try {
+        *count = 0;
+
+        if (Value::array_t == battery_values.valueType()) {
+            std::vector < Value > d = battery_values.asArray();
+
+            *count = d.size();
+
+            if (d.size()) {
+                *bs = lsm_battery_record_array_alloc(d.size());
+
+                if (*bs) {
+                    for (size_t i = 0; i < d.size(); ++i) {
+                        (*bs)[i] = value_to_battery(d[i]);
+                        if (!((*bs)[i])) {
+                            rc = LSM_ERR_NO_MEMORY;
+                            goto error;
+                        }
+                    }
+                } else {
+                    rc = LSM_ERR_NO_MEMORY;
+                }
+            }
+        }
+    }
+    catch(const ValueException & ve) {
+        rc = LSM_ERR_LIB_BUG;
+        goto error;
+    }
+
+  out:
+    return rc;
+
+  error:
+    if (*bs && *count) {
+        lsm_battery_record_array_free(*bs, *count);
+        *bs = NULL;
+        *count = 0;
+    }
+    goto out;
 }

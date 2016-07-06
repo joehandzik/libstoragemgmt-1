@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2014 Red Hat, Inc.
+# Copyright (C) 2011-2016 Red Hat, Inc.
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -16,7 +16,7 @@
 #         Gris Ge <fge@redhat.com>
 
 from lsm import (uri_parse, VERSION, Capabilities, INfs,
-                 IStorageAreaNetwork, search_property)
+                 IStorageAreaNetwork, search_property, Client)
 
 from simarray import SimArray
 
@@ -34,8 +34,8 @@ class SimPlugin(INfs, IStorageAreaNetwork):
         self.uri = uri
         self.password = password
 
-        #The caller may want to start clean, so we allow the caller to specify
-        #a file to store and retrieve individual state.
+        # The caller may want to start clean, so we allow the caller to specify
+        # a file to store and retrieve individual state.
         qp = uri_parse(uri)
         if 'parameters' in qp and 'statefile' in qp['parameters'] \
                 and qp['parameters']['statefile'] is not None:
@@ -84,6 +84,14 @@ class SimPlugin(INfs, IStorageAreaNetwork):
         rc.set(Capabilities.NFS_EXPORTS_QUICK_SEARCH, Capabilities.UNSUPPORTED)
         rc.set(Capabilities.TARGET_PORTS_QUICK_SEARCH,
                Capabilities.UNSUPPORTED)
+        rc.set(Capabilities.VOLUME_PHYSICAL_DISK_CACHE_UPDATE_SYSTEM_LEVEL,
+               Capabilities.UNSUPPORTED)
+        rc.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_IMPACT_READ,
+               Capabilities.UNSUPPORTED)
+        rc.set(Capabilities.VOLUME_WRITE_CACHE_POLICY_UPDATE_WB_IMPACT_OTHER,
+               Capabilities.UNSUPPORTED)
+        rc.set(Capabilities.VOLUME_READ_CACHE_POLICY_UPDATE_IMPACT_WRITE,
+               Capabilities.UNSUPPORTED)
         return rc
 
     def plugin_info(self, flags=0):
@@ -92,6 +100,9 @@ class SimPlugin(INfs, IStorageAreaNetwork):
     def systems(self, flags=0):
         sim_syss = self.sim_array.systems()
         return [SimPlugin._sim_data_2_lsm(s) for s in sim_syss]
+
+    def system_read_cache_pct_update(self, system, read_pct, flags=0):
+        return self.sim_array.system_read_cache_pct_update(system, read_pct)
 
     def pools(self, search_key=None, search_value=None, flags=0):
         sim_pools = self.sim_array.pools(flags)
@@ -302,3 +313,31 @@ class SimPlugin(INfs, IStorageAreaNetwork):
                            flags=0):
         return self.sim_array.volume_raid_create(
             name, raid_type, disks, strip_size)
+
+    def volume_ident_led_on(self, volume, flags=0):
+        return self.sim_array.volume_ident_led_on(volume)
+
+    def volume_ident_led_off(self, volume, flags=0):
+        return self.sim_array.volume_ident_led_off(volume)
+
+    def batteries(self, search_key=None, search_value=None,
+                  flags=Client.FLAG_RSVD):
+        sim_batteries = self.sim_array.batteries()
+        return search_property(
+            [SimPlugin._sim_data_2_lsm(b) for b in sim_batteries],
+            search_key, search_value)
+
+    def volume_cache_info(self, volume, flags=Client.FLAG_RSVD):
+        return self.sim_array.volume_cache_info(volume)
+
+    def volume_physical_disk_cache_update(self, volume, pdc,
+                                          flags=Client.FLAG_RSVD):
+        return self.sim_array.volume_physical_disk_cache_update(volume, pdc)
+
+    def volume_read_cache_policy_update(self, volume, rcp,
+                                        flags=Client.FLAG_RSVD):
+        return self.sim_array.volume_read_cache_policy_update(volume, rcp)
+
+    def volume_write_cache_policy_update(self, volume, wcp,
+                                         flags=Client.FLAG_RSVD):
+        return self.sim_array.volume_write_cache_policy_update(volume, wcp)

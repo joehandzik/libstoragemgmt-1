@@ -1,4 +1,4 @@
-## Copyright (C) 2015 Red Hat, Inc.
+## Copyright (C) 2015-2016 Red Hat, Inc.
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -32,16 +32,6 @@ def cmd_exec(cmds):
     if errno != 0:
         raise ExecError(" ".join(cmds), errno, str_stdout, str_stderr)
     return str_stdout
-
-
-def file_read(file_path):
-    """
-    Read file and return string of file content.
-    """
-    fd = open(file_path, 'r')
-    content = fd.read()
-    fd.close()
-    return content
 
 
 class ExecError(Exception):

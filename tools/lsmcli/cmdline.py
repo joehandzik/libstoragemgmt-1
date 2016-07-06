@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2014 Red Hat, Inc.
+# Copyright (C) 2012-2016 Red Hat, Inc.
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -34,12 +34,19 @@ from argparse import RawTextHelpFormatter
 from lsm import (Client, Pool, VERSION, LsmError, Disk,
                  Volume, JobStatus, ErrorNumber, BlockRange,
                  uri_parse, Proxy, size_human_2_size_bytes,
-                 AccessGroup, FileSystem, NfsExport, TargetPort)
+                 AccessGroup, FileSystem, NfsExport, TargetPort, LocalDisk,
+                 Battery)
 
 from lsm.lsmcli.data_display import (
     DisplayData, PlugData, out,
     vol_provision_str_to_type, vol_rep_type_str_to_type, VolumeRAIDInfo,
-    PoolRAIDInfo, VcrCap)
+    PoolRAIDInfo, VcrCap, LocalDiskInfo, VolumeRAMCacheInfo)
+
+_CONNECTION_FREE_COMMANDS = ['local-disk-list',
+                             'local-disk-ident-led-on',
+                             'local-disk-ident-led-off',
+                             'local-disk-fault-led-on',
+                             'local-disk-fault-led-off']
 
 
 ## Wraps the invocation to the command line
@@ -61,13 +68,21 @@ def cmd_line_wrapper(c=None):
     except LsmError as le:
         sys.stderr.write(str(le) + "\n")
         sys.stderr.flush()
-        err_exit = 4
+        if le.code == ErrorNumber.PERMISSION_DENIED:
+            err_exit = 13   # common error code for EACCES
+        else:
+            err_exit = 4
     except KeyboardInterrupt:
         err_exit = 1
+    except SystemExit as se:
+        # argparse raises a SystemExit
+        err_exit = se.code
+    except:
+        # We get *any* other exception don't return a successful error code
+        err_exit = 2
     finally:
-        # We got here because of an exception, but we still may have a valid
-        # connection to do an orderly shutdown with, lets try it before we
-        # just exit closing the connection.
+        # Regardless of what happens, we will try to close the connection if
+        # possible to allow the plugin to clean up gracefully.
         if cli:
             try:
                 # This will exit if are successful
@@ -105,6 +120,88 @@ def parse_convert_init(init_id):
     raise ArgError("--init-id %s is not a valid WWPN or iSCSI IQN" % init_id)
 
 
+_CHILD_OPTION_DST_PREFIX = 'child_'
+
+
+def _add_common_options(arg_parser, is_child=False):
+    """
+    As https://bugs.python.org/issue23058 indicate, argument parser should
+    not have subparser sharing the same argument and destination.
+    For subparser, we add common options as 'child_xxx' destination.
+    For default value, False is the only allowed default value in root.
+    """
+    prefix = ''
+    if is_child:
+        prefix = _CHILD_OPTION_DST_PREFIX
+
+    arg_parser.add_argument(
+        '-v', '--version', action='version',
+        version="%s %s" % (sys.argv[0], VERSION))
+
+    arg_parser.add_argument(
+        '-u', '--uri', action="store", type=str, metavar='<URI>',
+        dest="%suri" % prefix,
+        help='Uniform resource identifier (env LSMCLI_URI)')
+
+    arg_parser.add_argument(
+        '-P', '--prompt', action="store_true", dest="%sprompt" % prefix,
+        help='Prompt for password (env LSMCLI_PASSWORD)')
+
+    arg_parser.add_argument(
+        '-H', '--human', action="store_true", dest="%shuman" % prefix,
+        help='Print sizes in human readable format\n'
+             '(e.g., MiB, GiB, TiB)')
+
+    arg_parser.add_argument(
+        '-t', '--terse', action="store", dest="%ssep" % prefix,
+        metavar='<SEP>',
+        help='Print output in terse form with "SEP" '
+             'as a record separator')
+
+    arg_parser.add_argument(
+        '-e', '--enum', action="store_true", dest="%senum" % prefix,
+        default=False,
+        help='Display enumerated types as numbers instead of text')
+
+    arg_parser.add_argument(
+        '-f', '--force', action="store_true", dest="%sforce" % prefix,
+        default=False,
+        help='Bypass confirmation prompt for data loss operations')
+
+    arg_parser.add_argument(
+        '-w', '--wait', action="store", type=int, dest="%swait" % prefix,
+        help="Command timeout value in ms (default = 30s)")
+
+    arg_parser.add_argument(
+        '--header', action="store_true", dest="%sheader" % prefix,
+        help='Include the header with terse')
+
+    arg_parser.add_argument(
+        '-b', action="store_true", dest="%sasync" % prefix, default=False,
+        help='Run the command async. Instead of waiting for completion.\n '
+             'Command will exit(7) and job id written to stdout.')
+
+    arg_parser.add_argument(
+        '-s', '--script', action="store_true", dest="%sscript" % prefix,
+        default=False, help='Displaying data in script friendly way.')
+
+    if is_child:
+        default_dict = dict()
+        default_dict['%swait' % prefix] = 30000
+        arg_parser.set_defaults(**default_dict)
+
+
+def _add_sd_paths(lsm_obj):
+    lsm_obj.sd_paths = []
+    try:
+        if len(lsm_obj.vpd83) > 0:
+            lsm_obj.sd_paths = LocalDisk.vpd83_search(lsm_obj.vpd83)
+    except LsmError as lsm_err:
+        if lsm_err.code != ErrorNumber.NO_SUPPORT:
+            raise
+    return lsm_obj
+
+
 ## This class represents a command line argument error
 class ArgError(Exception):
     def __init__(self, message, *args, **kwargs):
@@ -134,13 +231,29 @@ def _get_item(l, the_id, friendly_name='item', raise_error=True):
 
 list_choices = ['VOLUMES', 'POOLS', 'FS', 'SNAPSHOTS',
                 'EXPORTS', "NFS_CLIENT_AUTH", 'ACCESS_GROUPS',
-                'SYSTEMS', 'DISKS', 'PLUGINS', 'TARGET_PORTS']
+                'SYSTEMS', 'DISKS', 'PLUGINS', 'TARGET_PORTS', 'BATTERIES']
 
 provision_types = ('DEFAULT', 'THIN', 'FULL')
 provision_help = "provisioning type: " + ", ".join(provision_types)
 
 replicate_types = ('CLONE', 'COPY', 'MIRROR_ASYNC', 'MIRROR_SYNC')
 replicate_help = "replication type: " + ", ".join(replicate_types)
+
+policy_types = ['ENABLE', 'DISABLE']
+policy_help = 'Policy: ' + ', '.join(policy_types)
+policy_opt = dict(name="--policy", metavar='<POLICY>',
+                  help=policy_help, choices=policy_types,
+                  type=str.upper)
+
+write_cache_policy_types = ['WB', 'AUTO', 'WT']
+write_cache_policy_help = 'Write cache policys: ' + \
+                          ', '.join(write_cache_policy_types) + \
+                          'which stand for "write back", "auto", ' + \
+                          '"write through"'
+write_cache_policy_opt = dict(name="--policy", metavar='<POLICY>',
+                              help=write_cache_policy_help,
+                              choices=write_cache_policy_types,
+                              type=str.upper)
 
 size_help = 'Can use B, KiB, MiB, GiB, TiB, PiB postfix (IEC sizing)'
 
@@ -177,6 +290,9 @@ size_opt = dict(name='--size', metavar='<SIZE>', help=size_help)
 
 tgt_id_opt = dict(name="--tgt", help="Search by target port ID",
                   metavar='<TGT_ID>')
+
+local_disk_path_opt = dict(name='--path', help="Local disk path",
+                           metavar='<DISK_PATH>')
 
 cmds = (
     dict(
@@ -403,6 +519,35 @@ cmds = (
         help='Query volume RAID infomation',
         args=[
             dict(vol_id_opt),
+        ],
+    ),
+
+    dict(
+        name='volume-ident-led-on',
+        help='Enable the IDENT LED for a volume',
+        args=[
+            dict(name="--vol", metavar='<VOL_ID>',
+                 help='Targeted volume.\n'),
+        ],
+    ),
+
+    dict(
+        name='volume-ident-led-off',
+        help='Disable the IDENT LED for a volume',
+        args=[
+            dict(name="--vol", metavar='<VOL_ID>',
+                 help='Targeted volume.\n'),
+        ],
+    ),
+
+    dict(
+        name='system-read-cache-pct-update',
+        help='Change the read cache percentage of a system',
+        args=[
+            dict(name="--sys", metavar='<SYS_ID>',
+                 help='Targeted system.\n'),
+            dict(name="--read-pct",
+                 help="Read cache percentage.\n"),
         ],
     ),
 
@@ -652,6 +797,74 @@ cmds = (
         ],
     ),
 
+    dict(
+        name='local-disk-list',
+        help='Query local disk information',
+        args=[
+        ],
+        optional=[
+        ],
+    ),
+    dict(
+        name='volume-cache-info',
+        help='Query volume RAM cache information',
+        args=[
+            dict(vol_id_opt),
+        ],
+    ),
+    dict(
+        name='volume-phy-disk-cache-update',
+        help='Update volume physical disk cache setting',
+        args=[
+            dict(vol_id_opt),
+            dict(policy_opt),
+        ],
+    ),
+
+    dict(
+        name='volume-read-cache-policy-update',
+        help='Update volume read cache policy',
+        args=[
+            dict(vol_id_opt),
+            dict(policy_opt),
+        ],
+    ),
+    dict(
+        name='volume-write-cache-policy-update',
+        help='Update volume write cache policy',
+        args=[
+            dict(vol_id_opt),
+            dict(write_cache_policy_opt),
+        ],
+    ),
+    dict(
+        name='local-disk-ident-led-on',
+        help='Turn on the identification LED for a local disk',
+        args=[
+            dict(local_disk_path_opt),
+        ],
+    ),
+    dict(
+        name='local-disk-ident-led-off',
+        help='Turn off the identification LED for a local disk',
+        args=[
+            dict(local_disk_path_opt),
+        ],
+    ),
+    dict(
+        name='local-disk-fault-led-on',
+        help='Turn on the fault LED for a local disk',
+        args=[
+            dict(local_disk_path_opt),
+        ],
+    ),
+    dict(
+        name='local-disk-fault-led-off',
+        help='Turn off the fault LED for a local disk',
+        args=[
+            dict(local_disk_path_opt),
+        ],
+    ),
 )
 
 aliases = (
@@ -678,7 +891,20 @@ aliases = (
     ['ar', 'access-group-remove'],
     ['ad', 'access-group-delete'],
     ['vri', 'volume-raid-info'],
+    ['vilon', 'volume-ident-led-on'],
+    ['viloff', 'volume-ident-led-off'],
+    ['srcpu', 'system-read-cache-pct-update'],
     ['pmi', 'pool-member-info'],
+    ['ldl', 'local-disk-list'],
+    ['lb', 'list --type batteries'],
+    ['vci', 'volume-cache-info'],
+    ['vpdcu', 'volume-phy-disk-cache-update'],
+    ['vrcpu', 'volume-read-cache-policy-update'],
+    ['vwcpu', 'volume-write-cache-policy-update'],
+    ['ldilon', 'local-disk-ident-led-on'],
+    ['ldiloff', 'local-disk-ident-led-off'],
+    ['ldflon', 'local-disk-fault-led-on'],
+    ['ldfloff', 'local-disk-fault-led-off'],
 )
 
 
@@ -763,62 +989,16 @@ class CmdLine:
         Command line interface parameters
         """
         parent_parser = ArgumentParser(add_help=False)
-
-        parent_parser.add_argument(
-            '-v', '--version', action='version',
-            version="%s %s" % (sys.argv[0], VERSION))
-
-        parent_parser.add_argument(
-            '-u', '--uri', action="store", type=str, metavar='<URI>',
-            dest="uri", help='Uniform resource identifier (env LSMCLI_URI)')
-
-        parent_parser.add_argument(
-            '-P', '--prompt', action="store_true", dest="prompt",
-            help='Prompt for password (env LSMCLI_PASSWORD)')
-
-        parent_parser.add_argument(
-            '-H', '--human', action="store_true", dest="human",
-            help='Print sizes in human readable format\n'
-                 '(e.g., MiB, GiB, TiB)')
-
-        parent_parser.add_argument(
-            '-t', '--terse', action="store", dest="sep", metavar='<SEP>',
-            help='Print output in terse form with "SEP" '
-                 'as a record separator')
-
-        parent_parser.add_argument(
-            '-e', '--enum', action="store_true", dest="enum", default=False,
-            help='Display enumerated types as numbers instead of text')
-
-        parent_parser.add_argument(
-            '-f', '--force', action="store_true", dest="force", default=False,
-            help='Bypass confirmation prompt for data loss operations')
-
-        parent_parser.add_argument(
-            '-w', '--wait', action="store", type=int, dest="wait",
-            default=30000, help="Command timeout value in ms (default = 30s)")
-
-        parent_parser.add_argument(
-            '--header', action="store_true", dest="header",
-            help='Include the header with terse')
-
-        parent_parser.add_argument(
-            '-b', action="store_true", dest="async", default=False,
-            help='Run the command async. Instead of waiting for completion.\n '
-                 'Command will exit(7) and job id written to stdout.')
-
-        parent_parser.add_argument(
-            '-s', '--script', action="store_true", dest="script",
-            default=False, help='Displaying data in script friendly way.')
+        _add_common_options(parent_parser, is_child=True)
 
         parser = ArgumentParser(
             description='The libStorageMgmt command line interface.'
                         ' Run %(prog)s <command> -h for more on each command.',
-            epilog='Copyright 2012-2015 Red Hat, Inc.\n'
+            epilog='Copyright 2012-2016 Red Hat, Inc.\n'
                    'Please report bugs to '
                    '<libstoragemgmt-devel@lists.fedorahosted.org>\n',
-            formatter_class=RawTextHelpFormatter,
-            parents=[parent_parser])
+            formatter_class=RawTextHelpFormatter)
+        _add_common_options(parser, is_child=False)
 
         subparsers = parser.add_subparsers(metavar="command")
 
@@ -854,8 +1034,16 @@ class CmdLine:
                 cmd=alias[1].split(" "), func=self.handle_alias)
 
         self.parser = parser
-        known_agrs, self.unknown_args = parser.parse_known_args()
-        return known_agrs
+        known_args, self.unknown_args = parser.parse_known_args()
+        # Copy child value to root.
+        for k, v in vars(known_args).iteritems():
+            if k.startswith(_CHILD_OPTION_DST_PREFIX):
+                root_k = k[len(_CHILD_OPTION_DST_PREFIX):]
+                if getattr(known_args, root_k) is None or \
+                   getattr(known_args, root_k) is False:
+                    setattr(known_args, root_k, v)
+
+        return known_args
 
     ## Display the types of nfs client authentication that are supported.
     # @return None
@@ -890,7 +1078,7 @@ class CmdLine:
             search_value = args.ag
         if args.fs:
             search_key = 'fs_id'
-            search_value = args.ag
+            search_value = args.fs
         if args.nfs_export:
             search_key = 'nfs_export_id'
             search_value = args.nfs_export
@@ -899,20 +1087,23 @@ class CmdLine:
             search_value = args.tgt
 
         if args.type == 'VOLUMES':
+            lsm_vols = []
             if search_key == 'volume_id':
                 search_key = 'id'
             if search_key == 'access_group_id':
                 lsm_ag = _get_item(self.c.access_groups(), args.ag,
                                    "Access Group", raise_error=False)
                 if lsm_ag:
-                    return self.display_data(
-                        self.c.volumes_accessible_by_access_group(lsm_ag))
-                else:
-                    return self.display_data([])
+                    lsm_vols = self.c.volumes_accessible_by_access_group(
+                        lsm_ag)
             elif search_key and search_key not in Volume.SUPPORTED_SEARCH_KEYS:
                 raise ArgError("Search key '%s' is not supported by "
                                "volume listing." % search_key)
-            self.display_data(self.c.volumes(search_key, search_value))
+            else:
+                lsm_vols = self.c.volumes(search_key, search_value)
+
+            self.display_data(list(_add_sd_paths(v) for v in lsm_vols))
+
         elif args.type == 'POOLS':
             if search_key == 'pool_id':
                 search_key = 'id'
@@ -972,7 +1163,8 @@ class CmdLine:
                 raise ArgError("Search key '%s' is not supported by "
                                "disk listing" % search_key)
             self.display_data(
-                self.c.disks(search_key, search_value))
+                list(_add_sd_paths(d)
+                     for d in self.c.disks(search_key, search_value)))
         elif args.type == 'TARGET_PORTS':
             if search_key == 'tgt_port_id':
                 search_key = 'id'
@@ -984,6 +1176,13 @@ class CmdLine:
                 self.c.target_ports(search_key, search_value))
         elif args.type == 'PLUGINS':
             self.display_available_plugins()
+        elif args.type == 'BATTERIES':
+            if search_key and \
+               search_key not in Battery.SUPPORTED_SEARCH_KEYS:
+                raise ArgError("Search key '%s' is not supported by "
+                               "battery listing" % search_key)
+            self.display_data(
+                self.c.batteries(search_key, search_value))
         else:
             raise ArgError("unsupported listing type=%s" % args.type)
 
@@ -1018,7 +1217,7 @@ class CmdLine:
         agl = self.c.access_groups()
         group = _get_item(agl, args.ag, "Access Group")
         vols = self.c.volumes_accessible_by_access_group(group)
-        self.display_data(vols)
+        self.display_data(list(_add_sd_paths(v) for v in vols))
 
     def iscsi_chap(self, args):
         (init_id, init_type) = parse_convert_init(args.init)
@@ -1072,7 +1271,7 @@ class CmdLine:
 
         ss = None
         if args.backing_snapshot:
-            #go get the snapshot
+            # go get the snapshot
             ss = _get_item(self.c.fs_snapshots(src_fs),
                            args.backing_snapshot, "Snapshot")
 
@@ -1084,7 +1283,7 @@ class CmdLine:
     def file_clone(self, args):
         fs = _get_item(self.c.fs(), args.fs, "File System")
         if self.args.backing_snapshot:
-            #go get the snapshot
+            # go get the snapshot
             ss = _get_item(self.c.fs_snapshots(fs),
                            args.backing_snapshot, "Snapshot")
         else:
@@ -1094,7 +1293,7 @@ class CmdLine:
             "fs_file_clone", self.c.fs_file_clone(fs, args.src, args.dst, ss),
             None)
 
-    ##Converts a size parameter into the appropriate number of bytes
+    ## Converts a size parameter into the appropriate number of bytes
     # @param    s   Size to convert to bytes handles B, K, M, G, T, P postfix
     # @return Size in bytes
     @staticmethod
@@ -1149,7 +1348,7 @@ class CmdLine:
 
     ## Creates a volume
     def volume_create(self, args):
-        #Get pool
+        # Get pool
         p = _get_item(self.c.pools(), args.pool, "Pool")
         vol = self._wait_for_it(
             "volume-create",
@@ -1158,11 +1357,11 @@ class CmdLine:
                 args.name,
                 self._size(args.size),
                 vol_provision_str_to_type(args.provisioning)))
-        self.display_data([vol])
+        self.display_data([_add_sd_paths(vol)])
 
     ## Creates a snapshot
     def fs_snap_create(self, args):
-        #Get fs
+        # Get fs
         fs = _get_item(self.c.fs(), args.fs, "File System")
         ss = self._wait_for_it("snapshot-create",
                                *self.c.fs_snapshot_create(
@@ -1173,7 +1372,7 @@ class CmdLine:
 
     ## Restores a snap shot
     def fs_snap_restore(self, args):
-        #Get snapshot
+        # Get snapshot
         fs = _get_item(self.c.fs(), args.fs, "File System")
         ss = _get_item(self.c.fs_snapshots(fs), args.snap, "Snapshot")
 
@@ -1218,8 +1417,8 @@ class CmdLine:
         if not job:
             return item
         else:
-            #If a user doesn't want to wait, return the job id to stdout
-            #and exit with job in progress
+            # If a user doesn't want to wait, return the job id to stdout
+            # and exit with job in progress
             if self.args.async:
                 out(job)
                 self.shutdown(ErrorNumber.JOB_STARTED)
@@ -1228,14 +1427,14 @@ class CmdLine:
                 (s, percent, item) = self.c.job_status(job)
 
                 if s == JobStatus.INPROGRESS:
-                    #Add an option to spit out progress?
-                    #print "%s - Percent %s complete" % (job, percent)
+                    # Add an option to spit out progress?
+                    # print "%s - Percent %s complete" % (job, percent)
                     time.sleep(0.25)
                 elif s == JobStatus.COMPLETE:
                     self.c.job_free(job)
                     return item
                 else:
-                    #Something better to do here?
+                    # Something better to do here?
                     raise ArgError(msg + " job error code= " + str(s))
 
     ## Retrieves the status of the specified job
@@ -1266,7 +1465,7 @@ class CmdLine:
         vol = self._wait_for_it(
             "replicate volume",
             *self.c.volume_replicate(p, rep_type, v, args.name))
-        self.display_data([vol])
+        self.display_data([_add_sd_paths(vol)])
 
     ## Replicates a range of a volume
     def volume_replicate_range(self, args):
@@ -1319,7 +1518,7 @@ class CmdLine:
         if self.confirm_prompt(False):
             vol = self._wait_for_it("resize",
                                     *self.c.volume_resize(v, size))
-            self.display_data([vol])
+            self.display_data([_add_sd_paths(vol)])
 
     ## Enable a volume
     def volume_enable(self, args):
@@ -1408,13 +1607,30 @@ class CmdLine:
             strip_size = Volume.VCR_STRIP_SIZE_DEFAULT
 
         self.display_data([
-            self.c.volume_raid_create(
-                args.name, raid_type, lsm_disks, strip_size)])
+            _add_sd_paths(
+                self.c.volume_raid_create(
+                    args.name, raid_type, lsm_disks, strip_size))])
 
     def volume_raid_create_cap(self, args):
         lsm_sys = _get_item(self.c.systems(), args.sys, "System")
         self.display_data([
             VcrCap(lsm_sys.id, *self.c.volume_raid_create_cap_get(lsm_sys))])
+
+    def volume_ident_led_on(self, args):
+        lsm_volume = _get_item(self.c.volumes(), args.vol, "Volume")
+
+        self.c.volume_ident_led_on(lsm_volume)
+
+    def volume_ident_led_off(self, args):
+        lsm_volume = _get_item(self.c.volumes(), args.vol, "Volume")
+
+        self.c.volume_ident_led_off(lsm_volume)
+
+    def system_read_cache_pct_update(self, args):
+        lsm_system = _get_item(self.c.systems(), args.sys, "System")
+        read_pct = int(args.read_pct)
+
+        self.c.system_read_cache_pct_update(lsm_system, read_pct)
 
     ## Displays file system dependants
     def fs_dependants(self, args):
@@ -1455,6 +1671,18 @@ class CmdLine:
                 except ValueError:
                     pass
 
+    def is_connection_free_cmd(self):
+        """
+        Return True if current command is one of _CONNECTION_FREE_COMMANDS.
+        """
+        if self.args.func == self.handle_alias and \
+           self.args.cmd[0] in _CONNECTION_FREE_COMMANDS:
+            return True
+
+        if self.args.func.__name__ in _CONNECTION_FREE_COMMANDS:
+            return True
+        return False
+
     ## Class constructor.
     def __init__(self):
         self.uri = None
@@ -1468,6 +1696,9 @@ class CmdLine:
         self.tmo = int(self.args.wait)
         if not self.tmo or self.tmo < 0:
             raise ArgError("[-w|--wait] requires a non-zero positive integer")
+
+        if self.is_connection_free_cmd():
+            return
 
         self._read_configfile()
         if os.getenv('LSMCLI_URI') is not None:
@@ -1493,7 +1724,7 @@ class CmdLine:
             self.password = getpass.getpass()
 
         if self.password is not None:
-            #Check for username
+            # Check for username
             u = uri_parse(self.uri)
             if u['username'] is None:
                 raise ArgError("password specified with no user name in uri")
@@ -1513,21 +1744,96 @@ class CmdLine:
         """
         Process the parsed command.
         """
-        if cli:
-            #Directly invoking code though a wrapper to catch unsupported
-            #operations.
-            self.c = Proxy(cli())
-            self.c.plugin_register(self.uri, self.password, self.tmo)
-            self.cleanup = self.c.plugin_unregister
+        if self.is_connection_free_cmd():
+            self.args.func(self.args)
         else:
-            #Going across the ipc pipe
-            self.c = Proxy(Client(self.uri, self.password, self.tmo))
+            if cli:
+                # Directly invoking code though a wrapper to catch unsupported
+                # operations.
+                self.c = Proxy(cli())
+                self.c.plugin_register(self.uri, self.password, self.tmo)
+                self.cleanup = self.c.plugin_unregister
+            else:
+                # Going across the ipc pipe
+                self.c = Proxy(Client(self.uri, self.password, self.tmo))
 
-            if os.getenv('LSM_DEBUG_PLUGIN'):
-                raw_input(
-                    "Attach debugger to plug-in, press <return> when ready...")
+                if os.getenv('LSM_DEBUG_PLUGIN'):
+                    raw_input("Attach debugger to plug-in, "
+                              "press <return> when ready...")
 
-            self.cleanup = self.c.close
+                self.cleanup = self.c.close
 
-        self.args.func(self.args)
-        self.shutdown()
+            self.args.func(self.args)
+            self.shutdown()
+
+    def local_disk_list(self, args):
+        local_disks = []
+        for disk_path in LocalDisk.list():
+            try:
+                vpd83 = LocalDisk.vpd83_get(disk_path)
+            except LsmError as lsm_err:
+                vpd83 = ""
+
+            rpm = LocalDisk.rpm_get(disk_path)
+            link_type = LocalDisk.link_type_get(disk_path)
+            local_disks.append(
+                LocalDiskInfo(disk_path, vpd83, rpm, link_type))
+
+        self.display_data(local_disks)
+
+    def volume_cache_info(self, args):
+        lsm_vol = _get_item(self.c.volumes(), args.vol, "Volume")
+        self.display_data(
+            [
+                VolumeRAMCacheInfo(
+                    lsm_vol.id, *self.c.volume_cache_info(lsm_vol))])
+
+    def volume_phy_disk_cache_update(self, args):
+        lsm_vol = _get_item(self.c.volumes(), args.vol, "Volume")
+        if args.policy == "ENABLE":
+            policy = Volume.READ_CACHE_POLICY_ENABLED
+        else:
+            policy = Volume.READ_CACHE_POLICY_DISABLED
+        self.c.volume_physical_disk_cache_update(lsm_vol, policy)
+        self.display_data(
+            [
+                VolumeRAMCacheInfo(
+                    lsm_vol.id, *self.c.volume_cache_info(lsm_vol))])
+
+    def volume_read_cache_policy_update(self, args):
+        lsm_vol = _get_item(self.c.volumes(), args.vol, "Volume")
+        if args.policy == "ENABLE":
+            policy = Volume.PHYSICAL_DISK_CACHE_ENABLED
+        else:
+            policy = Volume.PHYSICAL_DISK_CACHE_DISABLED
+        self.c.volume_read_cache_policy_update(lsm_vol, policy)
+        self.display_data(
+            [
+                VolumeRAMCacheInfo(
+                    lsm_vol.id, *self.c.volume_cache_info(lsm_vol))])
+
+    def volume_write_cache_policy_update(self, args):
+        lsm_vol = _get_item(self.c.volumes(), args.vol, "Volume")
+        if args.policy == 'WB':
+            policy = Volume.WRITE_CACHE_POLICY_WRITE_BACK
+        elif args.policy == 'AUTO':
+            policy = Volume. WRITE_CACHE_POLICY_AUTO
+        else:
+            policy = Volume. WRITE_CACHE_POLICY_WRITE_THROUGH
+        self.c.volume_write_cache_policy_update(lsm_vol, policy)
+        self.display_data(
+            [
+                VolumeRAMCacheInfo(
+                    lsm_vol.id, *self.c.volume_cache_info(lsm_vol))])
+
+    def local_disk_ident_led_on(self, args):
+        LocalDisk.ident_led_on(args.path)
+
+    def local_disk_ident_led_off(self, args):
+        LocalDisk.ident_led_off(args.path)
+
+    def local_disk_fault_led_on(self, args):
+        LocalDisk.fault_led_on(args.path)
+
+    def local_disk_fault_led_off(self, args):
+        LocalDisk.fault_led_off(args.path)

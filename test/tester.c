@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2011-2014 Red Hat, Inc.
+ * Copyright (C) 2011-2016 Red Hat, Inc.
+ * (C) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
@@ -14,6 +15,8 @@
  * License along with this library; If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: tasleson
+ *         Joe Handzik <joseph.t.handzik@hpe.com>
+ *         Gris Ge <fge@redhat.com>
  */
 
 #include <stdio.h>
@@ -24,15 +27,21 @@
 #include <libstoragemgmt/libstoragemgmt.h>
 #include <libstoragemgmt/libstoragemgmt_plug_interface.h>
 
-const char URI[] = "sim://localhost/?statefile=/tmp/%d/lsm_sim_%s";
+static int compare_battery(lsm_battery *l, lsm_battery *r);
+
+const char URI[] = "sim://localhost/?statefile=%s/lsm_sim_%s";
 const char SYSTEM_NAME[] = "LSM simulated storage plug-in";
 const char SYSTEM_ID[] = "sim-01";
 const char *ISCSI_HOST[2] = {   "iqn.1994-05.com.domain:01.89bd01",
                                 "iqn.1994-05.com.domain:01.89bd02" };
 
-static int which_plugin = 0;
+static int is_simc_plugin = 0;
 
 #define POLL_SLEEP 50000
+#define VPD83_TO_SEARCH "600508b1001c79ade5178f0626caaa9c"
+#define INVALID_VPD83 "600508b1001c79ade5178f0626caaa9c1"
+#define VALID_BUT_NOT_EXIST_VPD83 "5000000000000000"
+#define NOT_EXIST_SD_PATH "/dev/sdazzzzzzzzzzz"
 
 lsm_connect *c = NULL;
 
@@ -62,7 +71,7 @@ char *error(lsm_error_ptr e)
 #define G(variable, func, ...)     \
 variable = func(__VA_ARGS__);               \
 fail_unless( LSM_ERR_OK == variable, "call:%s rc = %d %s (which %d)", #func, \
-                    variable, error(lsm_error_last_get(c)), which_plugin);
+                    variable, error(lsm_error_last_get(c)), is_simc_plugin);
 
 /**
  * Macro for calls which we expect failure.
@@ -73,7 +82,7 @@ fail_unless( LSM_ERR_OK == variable, "call:%s rc = %d %s (which %d)", #func, \
 #define F(variable, func, ...)     \
 variable = func(__VA_ARGS__);               \
 fail_unless( LSM_ERR_OK != variable, "call:%s rc = %d %s (which %d)", #func, \
-                    variable, error(lsm_error_last_get(c)), which_plugin);
+                    variable, error(lsm_error_last_get(c)), is_simc_plugin);
 
 /**
 * Generates a random string in the buffer with specified length.
@@ -108,7 +117,7 @@ char *plugin_to_use()
 {
     char *uri_to_use = "sim://";
 
-    if( which_plugin == 1 ) {
+    if( is_simc_plugin == 1 ) {
         uri_to_use = "simc://";
     } else {
         char *rundir = getenv("LSM_TEST_RUNDIR");
@@ -118,11 +127,10 @@ char *plugin_to_use()
          */
 
         if( rundir ) {
-            int rdir = atoi(rundir);
             static char fn[128];
             static char name[32];
             generate_random(name, sizeof(name));
-            snprintf(fn, sizeof(fn),  URI, rdir, name);
+            snprintf(fn, sizeof(fn),  URI, rundir, name);
             uri_to_use = fn;
         } else {
             printf("Missing LSM_TEST_RUNDIR, expect test failures!\n");
@@ -185,6 +193,10 @@ void setup(void)
             printf("Attach debugger to plug-in, press <return> when ready...");
             getchar();
         }
+    }
+    if (rc != LSM_ERR_OK) {
+        printf("Failed to create connection: code %d, %s\n", rc, error(e));
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -677,7 +689,7 @@ START_TEST(test_access_groups)
     rc = lsm_access_group_initiator_add(c, group, "iqn.1994-05.com.domain:01.89bd02",
                                         LSM_ACCESS_GROUP_INIT_TYPE_ISCSI_IQN,
                                         &updated, LSM_CLIENT_FLAG_RSVD);
-    fail_unless(LSM_ERR_OK == rc, "Expected success on lsmAccessGroupInitiatorAdd %d %d", rc, which_plugin);
+    fail_unless(LSM_ERR_OK == rc, "Expected success on lsmAccessGroupInitiatorAdd %d %d", rc, is_simc_plugin);
 
     G(rc, lsm_access_group_list, c, NULL, NULL, &groups, &count, LSM_CLIENT_FLAG_RSVD);
     fail_unless( 1 == count );
@@ -774,7 +786,7 @@ START_TEST(test_access_groups_grant_revoke)
     if( LSM_ERR_JOB_STARTED == rc ) {
         wait_for_job(c, &job);
     } else {
-        fail_unless(LSM_ERR_OK == rc, "rc = %d, plug-in = %d", rc, which_plugin);
+        fail_unless(LSM_ERR_OK == rc, "rc = %d, plug-in = %d", rc, is_simc_plugin);
     }
 
     lsm_volume **volumes = NULL;
@@ -804,8 +816,8 @@ START_TEST(test_access_groups_grant_revoke)
     if( LSM_ERR_JOB_STARTED == rc ) {
         wait_for_job(c, &job);
     } else {
-        fail_unless(LSM_ERR_OK == rc, "rc = %d, which_plugin=%d",
-                    rc, which_plugin);
+        fail_unless(LSM_ERR_OK == rc, "rc = %d, is_simc_plugin=%d",
+                    rc, is_simc_plugin);
     }
 
     G(rc, lsm_access_group_delete, c, group, LSM_CLIENT_FLAG_RSVD);
@@ -884,7 +896,7 @@ START_TEST(test_fs)
         resized_fs = wait_for_job_fs(c, &job);
     }
 
-    if ( which_plugin == 0 ){
+    if ( is_simc_plugin == 0 ){
 
         uint8_t yes_no = 10;
         G(rc, lsm_fs_child_dependency, c, nfs, NULL, &yes_no,
@@ -1043,6 +1055,21 @@ static int compare_disks(lsm_disk *l, lsm_disk *r)
     return 1;
 }
 
+static int compare_battery(lsm_battery *l, lsm_battery *r)
+{
+    int rc;
+    if( l && r ) {
+        COMPARE_STR_FUNC(lsm_battery_id_get, l, r);
+        COMPARE_STR_FUNC(lsm_battery_name_get, l, r);
+        COMPARE_STR_FUNC(lsm_battery_system_id_get, l, r);
+        COMPARE_STR_FUNC(lsm_battery_plugin_data_get, l, r);
+        COMPARE_NUMBER_FUNC(lsm_battery_type_get, l, r);
+        COMPARE_NUMBER_FUNC(lsm_battery_status_get, l, r);
+        return 0;
+    }
+    return 1;
+}
+
 START_TEST(test_disks)
 {
     uint32_t count = 0;
@@ -1083,13 +1110,90 @@ START_TEST(test_disks)
             fail_unless( lsm_disk_number_of_blocks_get(d[i]) >= 1);
             fail_unless( lsm_disk_block_size_get(d[i]) >= 1);
             fail_unless( lsm_disk_status_get(d[i]) >= 1);
-
+            if (is_simc_plugin == 0) {
+                /* Only sim support lsm_disk_vpd83_get() yet */
+                fail_unless(lsm_disk_vpd83_get(d[i]) != NULL);
+            }
         }
         lsm_disk_record_array_free(d, count);
     } else {
         fail_unless(d == NULL);
         fail_unless(count == 0);
     }
+}
+END_TEST
+
+START_TEST(test_disk_rpm_and_link_type)
+{
+    uint32_t count = 0;
+    lsm_disk **disks = NULL;
+    int i = 0;
+    int rc = LSM_ERR_OK;
+    int32_t rpm = LSM_DISK_RPM_UNKNOWN;
+    lsm_disk_link_type link_type = LSM_DISK_LINK_TYPE_UNKNOWN;
+
+    fail_unless(c != NULL);
+
+    rc = lsm_disk_list(c, NULL, NULL, &disks, &count, 0);
+    fail_unless(LSM_ERR_OK == rc, "rc: %d", rc);
+
+    if (LSM_ERR_OK == rc) {
+        fail_unless(count >= 1);
+
+        for (; i < count; ++i) {
+            rpm = lsm_disk_rpm_get(disks[i]);
+            fail_unless(rpm != LSM_DISK_RPM_UNKNOWN,
+                        "Should not be LSM_DISK_RPM_UNKNOWN when input disk "
+                        "is valid", rc);
+
+            link_type = lsm_disk_link_type_get(disks[i]);
+            fail_unless(link_type != LSM_DISK_LINK_TYPE_UNKNOWN,
+                        "Should not be LSM_DISK_LINK_TYPE_UNKNOWN when input "
+                        "disk is valid", rc);
+        }
+
+        rpm = lsm_disk_rpm_get(NULL);
+        fail_unless(rpm == LSM_DISK_RPM_UNKNOWN,
+                    "Should be LSM_DISK_RPM_UNKNOWN when input disk is NULL",
+                    rc);
+        link_type = lsm_disk_link_type_get(NULL);
+        fail_unless(rpm == LSM_DISK_LINK_TYPE_UNKNOWN,
+                    "Should be LSM_DISK_LINK_TYPE_UNKNOWN when input disk is "
+                    "NULL", rc);
+
+        lsm_disk_record_array_free(disks, count);
+    } else {
+        fail_unless(disks == NULL);
+        fail_unless(count == 0);
+    }
+}
+END_TEST
+
+START_TEST(test_disk_location)
+{
+    uint32_t count = 0;
+    lsm_disk **d = NULL;
+    const char *location = NULL;
+    int i = 0;
+    int rc = LSM_ERR_OK;
+
+    fail_unless(c!=NULL);
+
+    G(rc, lsm_disk_list, c, NULL, NULL, &d, &count, 0);
+    fail_unless(count >= 1);
+
+    for(; i < count; ++i ) {
+        location = lsm_disk_location_get(d[i]);
+        fail_unless(location != NULL,
+                    "Got NULL return from lsm_disk_location_get()");
+
+        printf("Disk location: (%s)\n", location);
+    }
+    location = lsm_disk_location_get(NULL);
+    fail_unless(location == NULL,
+                "Got non-NULL return from lsm_disk_location_get(NULL)");
+
+    lsm_disk_record_array_free(d, count);
 }
 END_TEST
 
@@ -1957,6 +2061,102 @@ START_TEST(test_plugin_info)
 
     rc = lsm_plugin_info_get(c, &desc, NULL, LSM_CLIENT_FLAG_RSVD);
     fail_unless(LSM_ERR_INVALID_ARGUMENT == rc, "rc = %d", rc);
+}
+END_TEST
+
+START_TEST(test_system_fw_version)
+{
+    const char *fw_ver = NULL;
+    int rc = 0;
+    lsm_system **sys = NULL;
+    uint32_t sys_count = 0;
+
+    G(rc, lsm_system_list, c, &sys, &sys_count, LSM_CLIENT_FLAG_RSVD);
+    fail_unless(sys_count >= 1, "count = %d", sys_count);
+
+    fw_ver = lsm_system_fw_version_get(sys[0]);
+    fail_unless(fw_ver != NULL, "Got unexpected NULL return from "
+                "lsm_system_fw_version_get()");
+
+    fw_ver = lsm_system_fw_version_get(NULL);
+    fail_unless(fw_ver == NULL, "Got unexpected non-NULL return from "
+                "lsm_system_fw_version_get(NULL)");
+
+    lsm_system_record_array_free(sys, sys_count);
+}
+END_TEST
+
+START_TEST(test_system_mode)
+{
+    lsm_system_mode_type mode = LSM_SYSTEM_MODE_NO_SUPPORT;
+    int rc = 0;
+    lsm_system **sys = NULL;
+    uint32_t sys_count = 0;
+
+    G(rc, lsm_system_list, c, &sys, &sys_count, LSM_CLIENT_FLAG_RSVD);
+    fail_unless(sys_count >= 1, "count = %d", sys_count);
+
+    mode = lsm_system_mode_get(sys[0]);
+
+    fail_unless(mode != LSM_SYSTEM_MODE_UNKNOWN,
+                "Got unexpected LSM_SYSTEM_MODE_UNKNOWN from "
+                "lsm_system_mode_get()");
+
+    mode = lsm_system_mode_get(NULL);
+    fail_unless(mode == LSM_SYSTEM_MODE_UNKNOWN,
+                "Got unexpected return %d from "
+                "lsm_system_mode_get(NULL)", mode);
+
+    lsm_system_record_array_free(sys, sys_count);
+}
+END_TEST
+
+START_TEST(test_read_cache_pct)
+{
+    int read_cache_pct = LSM_SYSTEM_READ_CACHE_PCT_NO_SUPPORT;
+    int rc = 0;
+    lsm_system **sys = NULL;
+    uint32_t sys_count = 0;
+
+    G(rc, lsm_system_list, c, &sys, &sys_count, LSM_CLIENT_FLAG_RSVD);
+    fail_unless(sys_count >= 1, "count = %d", sys_count);
+
+    read_cache_pct = lsm_system_read_cache_pct_get(sys[0]);
+
+    fail_unless(read_cache_pct >= 0,
+                "Read cache should bigger that 0, but got %d", read_cache_pct);
+
+    read_cache_pct = lsm_system_read_cache_pct_get(NULL);
+    fail_unless(LSM_SYSTEM_READ_CACHE_PCT_UNKNOWN == read_cache_pct,
+                "When input system pointer is NULL, "
+                "lsm_system_read_cache_pct_get() should return "
+                "LSM_SYSTEM_READ_CACHE_PCT_UNKNOWN, but got %d",
+                read_cache_pct);
+
+    lsm_system_record_array_free(sys, sys_count);
+}
+END_TEST
+
+START_TEST(test_read_cache_pct_update)
+{
+    int rc = 0;
+    lsm_system **sys = NULL;
+    uint32_t sys_count = 0;
+
+    G(rc, lsm_system_list, c, &sys, &sys_count, LSM_CLIENT_FLAG_RSVD);
+    fail_unless( sys_count >= 1, "count = %d", sys_count);
+
+    if(sys_count > 0) {
+
+        G(rc, lsm_system_read_cache_pct_update, c, sys[0], 100,
+          LSM_CLIENT_FLAG_RSVD);
+
+        if (LSM_ERR_OK == rc)
+            printf("Read cache percentage changed\n");
+    }
+
+    lsm_system_record_array_free(sys, sys_count);
+
 }
 END_TEST
 
@@ -2927,7 +3127,7 @@ END_TEST
 
 START_TEST(test_volume_raid_create_cap_get)
 {
-    if (which_plugin == 1){
+    if (is_simc_plugin == 1){
         // silently skip on simc which does not support this method yet.
         return;
     }
@@ -2960,7 +3160,7 @@ END_TEST
 
 START_TEST(test_volume_raid_create)
 {
-    if (which_plugin == 1){
+    if (is_simc_plugin == 1){
         // silently skip on simc which does not support this method yet.
         return;
     }
@@ -3022,6 +3222,626 @@ START_TEST(test_volume_raid_create)
 }
 END_TEST
 
+START_TEST(test_volume_ident_led_on)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = get_test_pool(c);
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_raid_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless( rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsmVolumeCreate %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+
+    G(rc, lsm_volume_ident_led_on, c, volume, LSM_CLIENT_FLAG_RSVD);
+
+    if (LSM_ERR_OK == rc)
+        printf("Volume IDENT LED set\n");
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+}
+END_TEST
+
+START_TEST(test_volume_ident_led_off)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = get_test_pool(c);
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_raid_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless( rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsmVolumeCreate %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+
+    G(rc, lsm_volume_ident_led_off, c, volume, LSM_CLIENT_FLAG_RSVD);
+
+    if (LSM_ERR_OK == rc)
+        printf("Volume IDENT LED clear\n");
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+}
+END_TEST
+
+/*
+ * lsm_local_disk_list() should never fail.
+ */
+START_TEST(test_local_disk_list)
+{
+    int rc = LSM_ERR_OK;
+    lsm_string_list *disk_paths = NULL;
+    /* Not initialized in order to test dangling pointer disk_path_list */
+    lsm_error *lsm_err = NULL;
+
+    if (is_simc_plugin == 1){
+        /* silently skip on simc, no need for duplicate test. */
+        return;
+    }
+
+    rc = lsm_local_disk_list(&disk_paths, &lsm_err);
+    fail_unless(rc == LSM_ERR_OK, "lsm_local_disk_list() failed as %d", rc);
+    fail_unless(disk_paths != NULL, "lsm_local_disk_list() return NULL for "
+                "disk_paths");
+    lsm_string_list_free(disk_paths);
+}
+END_TEST
+
+/*
+ * Just check whether LSM_ERR_INVALID_ARGUMENT handle correctly.
+ */
+START_TEST(test_local_disk_vpd83_search)
+{
+    int rc = LSM_ERR_OK;
+    lsm_string_list *disk_path_list;
+    /* Not initialized in order to test dangling pointer disk_path_list */
+    lsm_error *lsm_err = NULL;
+
+    if (is_simc_plugin == 1){
+        /* silently skip on simc, no need for duplicate test. */
+        return;
+    }
+
+    rc = lsm_local_disk_vpd83_search(NULL, &disk_path_list, &lsm_err);
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "LSM_ERR_INVALID_ARGUMENT when vpd83 argument pointer is NULL");
+
+    fail_unless(disk_path_list == NULL,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "disk_path_list been set as NULL.");
+
+    fail_unless(lsm_err != NULL,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "lsm_err been set as non-NULL.");
+    fail_unless(lsm_error_number_get(lsm_err) == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "lsm_err been set with LSM_ERR_INVALID_ARGUMENT");
+    fail_unless(lsm_error_message_get(lsm_err) != NULL,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "lsm_err been set with non-NULL error message");
+    lsm_error_free(lsm_err);
+
+
+    rc = lsm_local_disk_vpd83_search(VPD83_TO_SEARCH, NULL, &lsm_err);
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "LSM_ERR_INVALID_ARGUMENT when disk_path_list argument pointer "
+                "is NULL");
+    lsm_error_free(lsm_err);
+
+    rc = lsm_local_disk_vpd83_search(VPD83_TO_SEARCH, &disk_path_list, NULL);
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "LSM_ERR_INVALID_ARGUMENT when lsm_err argument pointer "
+                "is NULL");
+
+    rc = lsm_local_disk_vpd83_search(INVALID_VPD83, &disk_path_list, &lsm_err);
+    fail_unless(lsm_err != NULL,
+                "lsm_local_disk_vpd83_search(): Expecting lsm_err "
+                "been set at not NULL when incorrect VPD83 provided");
+    fail_unless(lsm_error_number_get(lsm_err) == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "lsm_err been set with LSM_ERR_INVALID_ARGUMENT");
+    fail_unless(lsm_error_message_get(lsm_err) != NULL,
+                "lsm_local_disk_vpd83_search(): Expecting "
+                "lsm_err been set with non-NULL error message");
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_search(): Expecting LSM_ERR_OK "
+                "when no argument is NULL");
+    lsm_error_free(lsm_err);
+
+    rc = lsm_local_disk_vpd83_search(VPD83_TO_SEARCH, &disk_path_list, &lsm_err);
+    fail_unless(rc == LSM_ERR_OK,
+                "lsm_local_disk_vpd83_search(): Expecting LSM_ERR_OK"
+                "when no argument is NULL");
+
+    fail_unless(lsm_err == NULL,
+                "lsm_local_disk_vpd83_search(): Expecting lsm_err as NULL"
+                "when valid argument provided");
+
+    if (disk_path_list != NULL)
+        lsm_string_list_free(disk_path_list);
+
+    if (lsm_err != NULL)
+        lsm_error_free(lsm_err);
+    /* ^ No need to free lsm_err as programme already quit due to above check,
+     * keeping this line is just for code demonstration.
+     */
+
+    rc = lsm_local_disk_vpd83_search(VALID_BUT_NOT_EXIST_VPD83, &disk_path_list,
+                                      &lsm_err);
+    fail_unless(rc == LSM_ERR_OK,
+                "lsm_local_disk_vpd83_search(): Expecting LSM_ERR_OK"
+                "when no argument is NULL");
+    fail_unless(lsm_err == NULL,
+                "lsm_local_disk_vpd83_search(): Expecting lsm_err as NULL"
+                "when valid argument provided");
+    fail_unless(disk_path_list == NULL,
+                "lsm_local_disk_vpd83_search(): Expecting disk_path_list as "
+                "NULL when searching for VALID_BUT_NOT_EXIST_VPD83");
+
+}
+END_TEST
+
+START_TEST(test_local_disk_vpd83_get)
+{
+    int rc = LSM_ERR_OK;
+    char *vpd83;
+    /* Not initialized in order to test dangling pointer vpd83 */
+    lsm_error *lsm_err = NULL;
+
+    rc = lsm_local_disk_vpd83_get(NULL, &vpd83, &lsm_err);
+
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "LSM_ERR_INVALID_ARGUMENT when input is NULL");
+    fail_unless(vpd83 == NULL,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "vpd83 been set as NULL.");
+    fail_unless(lsm_err != NULL,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "lsm_err been set as non-NULL.");
+    fail_unless(lsm_error_number_get(lsm_err) == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "lsm_err been set with LSM_ERR_INVALID_ARGUMENT");
+    fail_unless(lsm_error_message_get(lsm_err) != NULL,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "lsm_err been set with non-NULL error message");
+    lsm_error_free(lsm_err);
+
+    rc = lsm_local_disk_vpd83_get("/dev/sda", NULL, &lsm_err);
+
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "LSM_ERR_INVALID_ARGUMENT when input is NULL");
+    lsm_error_free(lsm_err);
+
+    rc = lsm_local_disk_vpd83_get("/dev/sda", &vpd83, NULL);
+
+    fail_unless(rc == LSM_ERR_INVALID_ARGUMENT,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "LSM_ERR_INVALID_ARGUMENT when lsm_err is NULL");
+
+    /* We cannot make sure /dev/sda exists, but worth trying */
+    lsm_local_disk_vpd83_get("/dev/sda", &vpd83, &lsm_err);
+    if (lsm_err != NULL)
+        lsm_error_free(lsm_err);
+    free(vpd83);
+
+    /* Test non-exist disk */
+    rc = lsm_local_disk_vpd83_get(NOT_EXIST_SD_PATH, &vpd83, &lsm_err);
+    fail_unless(rc == LSM_ERR_NOT_FOUND_DISK,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "LSM_ERR_NOT_FOUND_DISK when disk not exist");
+    fail_unless(vpd83 == NULL,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "vpd83 as NULL when disk not exist");
+    fail_unless(lsm_err != NULL,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "lsm_err not NULL when disk not exist");
+    fail_unless(lsm_error_number_get(lsm_err) == LSM_ERR_NOT_FOUND_DISK,
+                "lsm_local_disk_vpd83_get(): Expecting "
+                "lsm_err been set with LSM_ERR_NOT_FOUND_DISK");
+    fail_unless(lsm_error_message_get(lsm_err) != NULL,
+                "lsm_local_disk_vpd83_get(): Expecting lsm_err "
+                "been set with non-NULL error message when disk not exist");
+    lsm_error_free(lsm_err);
+}
+END_TEST
+
+START_TEST(test_local_disk_rpm_get)
+{
+    int rc = 0;
+    int32_t rpm = LSM_DISK_RPM_UNKNOWN;
+    lsm_error *lsm_err = NULL;
+
+    rc = lsm_local_disk_rpm_get("/dev/sda", &rpm,  &lsm_err);
+    if (rc == LSM_ERR_OK) {
+        fail_unless(rpm != LSM_DISK_RPM_UNKNOWN,
+                    "lsm_local_disk_rpm_get(): "
+                    "Expecting rpm not been LSM_DISK_RPM_UNKNOWN "
+                    "when rc == LSM_ERR_OK");
+    } else {
+        lsm_error_free(lsm_err);
+    }
+
+    /* Test non-exist disk */
+    rc = lsm_local_disk_rpm_get(NOT_EXIST_SD_PATH, &rpm,  &lsm_err);
+    fail_unless(rc == LSM_ERR_NOT_FOUND_DISK, "lsm_local_disk_rpm_get(): "
+                "Expecting LSM_ERR_NOT_FOUND_DISK error with "
+                "non-exist sd_path");
+    fail_unless(lsm_err != NULL, "lsm_local_disk_rpm_get(): "
+                "Expecting lsm_err not NULL with non-exist sd_path");
+    fail_unless(lsm_error_number_get(lsm_err) == LSM_ERR_NOT_FOUND_DISK,
+                "lsm_local_disk_rpm_get(): "
+                "Expecting error number of lsm_err been set as "
+                "LSM_ERR_NOT_FOUND_DISK with non-exist sd_path");
+    fail_unless(lsm_error_message_get(lsm_err) != NULL,
+                "lsm_local_disk_rpm_get(): "
+                "Expecting error message of lsm_err not NULL "
+                "with non-exist sd_path");
+    lsm_error_free(lsm_err);
+
+}
+END_TEST
+
+START_TEST(test_local_disk_link_type)
+{
+    int rc = 0;
+    lsm_disk_link_type link_type = LSM_DISK_LINK_TYPE_UNKNOWN;
+    lsm_error *lsm_err = NULL;
+
+    rc = lsm_local_disk_link_type_get("/dev/sda", &link_type,  &lsm_err);
+    if (lsm_err != NULL)
+        fail_unless(rc != LSM_ERR_LIB_BUG,
+                    "lsm_local_disk_link_type_get() got LSM_ERR_LIB_BUG: %s",
+                    lsm_error_message_get(lsm_err));
+    else
+        fail_unless(rc != LSM_ERR_LIB_BUG,
+                    "lsm_local_disk_link_type_get() got LSM_ERR_LIB_BUG with "
+                    "NULL lsm_err");
+
+    if (rc != LSM_ERR_OK)
+        lsm_error_free(lsm_err);
+
+    /* Test non-exist disk */
+    rc = lsm_local_disk_link_type_get(NOT_EXIST_SD_PATH, &link_type, &lsm_err);
+    fail_unless(rc == LSM_ERR_NOT_FOUND_DISK,
+                "lsm_local_disk_link_type_get(): "
+                "Expecting LSM_ERR_NOT_FOUND_DISK error with "
+                "non-exist disk_path");
+    fail_unless(lsm_err != NULL, "lsm_local_disk_link_type_get(): "
+                "Expecting lsm_err not NULL with non-exist disk_path");
+    fail_unless(lsm_error_number_get(lsm_err) == LSM_ERR_NOT_FOUND_DISK,
+                "lsm_local_disk_link_type_get(): "
+                "Expecting error number of lsm_err been set as "
+                "LSM_ERR_NOT_FOUND_DISK with non-exist disk_path");
+    fail_unless(lsm_error_message_get(lsm_err) != NULL,
+                "lsm_local_disk_link_type_get(): "
+                "Expecting error message of lsm_err not NULL "
+                "with non-exist disk_path");
+    lsm_error_free(lsm_err);
+}
+END_TEST
+
+START_TEST(test_batteries)
+{
+    uint32_t count = 0;
+    lsm_battery **bs = NULL;
+    const char *id = NULL;
+    const char *name = NULL;
+    const char *system_id = NULL;
+    uint32_t i = 0;
+    lsm_battery *b_copy = NULL;
+
+    fail_unless(c != NULL);
+
+    int rc = lsm_battery_list(c, NULL, NULL, &bs, &count, 0);
+
+    fail_unless(LSM_ERR_OK == rc, "lsm_battery_list(): rc %d", rc);
+    fail_unless(count >= 1, "Got no battery");
+
+    for(; i < count; ++i) {
+        b_copy = lsm_battery_record_copy(bs[i]);
+        fail_unless(b_copy != NULL );
+        fail_unless(compare_battery(bs[i], b_copy) == 0);
+        lsm_battery_record_free(b_copy);
+        b_copy = NULL;
+
+        id = lsm_battery_id_get(bs[i]);
+        fail_unless(id != NULL && strlen(id) > 0);
+
+        name = lsm_battery_name_get(bs[i]);
+        fail_unless(name != NULL && strlen(name) > 0);
+
+        system_id = lsm_battery_system_id_get(bs[i]);
+        fail_unless(system_id != NULL && strlen(system_id) > 0);
+        fail_unless(strcmp(system_id, SYSTEM_ID) == 0,
+                    "Incorrect battery system id: %s", id);
+        fail_unless(lsm_battery_type_get(bs[i]) >= 1 );
+        fail_unless(lsm_battery_status_get(bs[i]) >= 1);
+    }
+    lsm_battery_record_array_free(bs, count);
+}
+END_TEST
+
+START_TEST(test_volume_cache_info)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = NULL;
+
+    uint32_t write_cache_policy = LSM_VOLUME_WRITE_CACHE_POLICY_UNKNOWN;
+    uint32_t write_cache_status = LSM_VOLUME_WRITE_CACHE_STATUS_UNKNOWN;
+    uint32_t read_cache_policy = LSM_VOLUME_READ_CACHE_POLICY_UNKNOWN;
+    uint32_t read_cache_status = LSM_VOLUME_READ_CACHE_STATUS_UNKNOWN;
+    uint32_t physical_disk_cache = LSM_VOLUME_PHYSICAL_DISK_CACHE_UNKNOWN;
+
+    pool = get_test_pool(c);
+
+    fail_unless(pool != NULL, "Failed to find the test pool");
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_cache_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless( rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsm_volume_create() %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+
+    G(rc, lsm_volume_cache_info, c, volume, &write_cache_policy,
+      &write_cache_status, &read_cache_policy, &read_cache_status,
+      &physical_disk_cache, LSM_CLIENT_FLAG_RSVD);
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+    volume = NULL;
+}
+END_TEST
+
+START_TEST(test_volume_pdc_update)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = NULL;
+    uint32_t write_cache_policy = LSM_VOLUME_WRITE_CACHE_POLICY_UNKNOWN;
+    uint32_t write_cache_status = LSM_VOLUME_WRITE_CACHE_STATUS_UNKNOWN;
+    uint32_t read_cache_policy = LSM_VOLUME_READ_CACHE_POLICY_UNKNOWN;
+    uint32_t read_cache_status = LSM_VOLUME_READ_CACHE_STATUS_UNKNOWN;
+    uint32_t physical_disk_cache = LSM_VOLUME_PHYSICAL_DISK_CACHE_UNKNOWN;
+    uint32_t all_pdcs[] = {
+        LSM_VOLUME_PHYSICAL_DISK_CACHE_DISABLED,
+        LSM_VOLUME_PHYSICAL_DISK_CACHE_ENABLED};
+    int i = 0;
+
+    if ( is_simc_plugin == 1 ){
+        // silently skip on simc which does not support this method yet.
+        return;
+    }
+
+    pool = get_test_pool(c);
+
+    fail_unless(pool != NULL, "Failed to find the test pool");
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_cache_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless(rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsm_volume_create() %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+    for (; i < (sizeof(all_pdcs)/sizeof(all_pdcs[0])); ++i) {
+        G(rc, lsm_volume_physical_disk_cache_update, c, volume,
+          all_pdcs[i], LSM_CLIENT_FLAG_RSVD);
+
+        G(rc, lsm_volume_cache_info, c, volume, &write_cache_policy,
+          &write_cache_status, &read_cache_policy, &read_cache_status,
+          &physical_disk_cache, LSM_CLIENT_FLAG_RSVD);
+
+        fail_unless(physical_disk_cache == all_pdcs[i],
+                    "Failed to change physical disk cache to %" PRIu32 "",
+                    all_pdcs[i]);
+    }
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+    volume = NULL;
+}
+END_TEST
+
+START_TEST(test_volume_wcp_update)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = NULL;
+    uint32_t write_cache_policy = LSM_VOLUME_WRITE_CACHE_POLICY_UNKNOWN;
+    uint32_t write_cache_status = LSM_VOLUME_WRITE_CACHE_STATUS_UNKNOWN;
+    uint32_t read_cache_policy = LSM_VOLUME_READ_CACHE_POLICY_UNKNOWN;
+    uint32_t read_cache_status = LSM_VOLUME_READ_CACHE_STATUS_UNKNOWN;
+    uint32_t physical_disk_cache = LSM_VOLUME_PHYSICAL_DISK_CACHE_UNKNOWN;
+    uint32_t all_wcps[] = {
+        LSM_VOLUME_WRITE_CACHE_POLICY_AUTO,
+        LSM_VOLUME_WRITE_CACHE_POLICY_WRITE_BACK,
+        LSM_VOLUME_WRITE_CACHE_POLICY_WRITE_THROUGH};
+    int i = 0;
+
+    if ( is_simc_plugin == 1 ){
+        // silently skip on simc which does not support this method yet.
+        return;
+    }
+
+    pool = get_test_pool(c);
+
+    fail_unless(pool != NULL, "Failed to find the test pool");
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_cache_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless(rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsm_volume_create() %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+    for (; i < (sizeof(all_wcps)/sizeof(all_wcps[0])); ++i) {
+        G(rc, lsm_volume_write_cache_policy_update, c, volume,
+          all_wcps[i], LSM_CLIENT_FLAG_RSVD);
+
+        G(rc, lsm_volume_cache_info, c, volume, &write_cache_policy,
+          &write_cache_status, &read_cache_policy, &read_cache_status,
+          &physical_disk_cache, LSM_CLIENT_FLAG_RSVD);
+
+        fail_unless(write_cache_policy == all_wcps[i],
+                    "Failed to change write cache policy to %" PRIu32 "",
+                    all_wcps[i]);
+    }
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+    volume = NULL;
+}
+END_TEST
+
+START_TEST(test_volume_rcp_update)
+{
+    lsm_volume *volume = NULL;
+    char *job = NULL;
+    lsm_pool *pool = NULL;
+    uint32_t write_cache_policy = LSM_VOLUME_WRITE_CACHE_POLICY_UNKNOWN;
+    uint32_t write_cache_status = LSM_VOLUME_WRITE_CACHE_STATUS_UNKNOWN;
+    uint32_t read_cache_policy = LSM_VOLUME_READ_CACHE_POLICY_UNKNOWN;
+    uint32_t read_cache_status = LSM_VOLUME_READ_CACHE_STATUS_UNKNOWN;
+    uint32_t physical_disk_cache = LSM_VOLUME_PHYSICAL_DISK_CACHE_UNKNOWN;
+    uint32_t all_rcps[] = {
+        LSM_VOLUME_READ_CACHE_POLICY_DISABLED,
+        LSM_VOLUME_READ_CACHE_POLICY_ENABLED};
+    int i = 0;
+
+    if ( is_simc_plugin == 1 ){
+        // silently skip on simc which does not support this method yet.
+        return;
+    }
+
+    pool = get_test_pool(c);
+
+    fail_unless(pool != NULL, "Failed to find the test pool");
+
+    int rc = lsm_volume_create(
+        c, pool, "volume_cache_info_test", 20000000,
+        LSM_VOLUME_PROVISION_DEFAULT, &volume, &job, LSM_CLIENT_FLAG_RSVD);
+
+    fail_unless(rc == LSM_ERR_OK || rc == LSM_ERR_JOB_STARTED,
+            "lsm_volume_create() %d (%s)", rc, error(lsm_error_last_get(c)));
+
+    if( LSM_ERR_JOB_STARTED == rc ) {
+        volume = wait_for_job_vol(c, &job);
+    }
+    for (; i < (sizeof(all_rcps)/sizeof(all_rcps[0])); ++i) {
+        G(rc, lsm_volume_read_cache_policy_update, c, volume,
+          all_rcps[i], LSM_CLIENT_FLAG_RSVD);
+
+        G(rc, lsm_volume_cache_info, c, volume, &write_cache_policy,
+          &write_cache_status, &read_cache_policy, &read_cache_status,
+          &physical_disk_cache, LSM_CLIENT_FLAG_RSVD);
+
+        fail_unless(read_cache_policy == all_rcps[i],
+                    "Failed to change write cache policy to %" PRIu32 "",
+                    all_rcps[i]);
+    }
+
+    G(rc, lsm_volume_record_free, volume);
+    G(rc, lsm_pool_record_free, pool);
+    volume = NULL;
+}
+END_TEST
+
+#define _TEST_LOCAL_DISK_LED(on_func, off_func) \
+do { \
+    int rc = LSM_ERR_OK; \
+    lsm_string_list *disk_paths = NULL; \
+    lsm_error *lsm_err = NULL; \
+    uint32_t i = 0; \
+    const char *disk_path = NULL; \
+    if (is_simc_plugin == 1) { \
+        /* silently skip on simc, no need for duplicate test. */ \
+        return; \
+    } \
+    rc = lsm_local_disk_list(&disk_paths, &lsm_err); \
+    fail_unless(rc == LSM_ERR_OK, "lsm_local_disk_list() failed as %d", rc); \
+    /* Only try maximum 4 disks */ \
+    for (; i < lsm_string_list_size(disk_paths) && i < 4; ++i) { \
+        disk_path = lsm_string_list_elem_get(disk_paths, i); \
+        fail_unless (disk_path != NULL, "Got NULL disk path"); \
+        rc = on_func(disk_path, &lsm_err); \
+        fail_unless(rc == LSM_ERR_OK || rc == LSM_ERR_NO_SUPPORT || \
+                    rc == LSM_ERR_PERMISSION_DENIED, \
+                    # on_func "(): Got unexpected return: %d", rc); \
+        if (rc != LSM_ERR_OK) { \
+            fail_unless(lsm_err != NULL, \
+                        # on_func "(): Got NULL lsm_err while " \
+                        "rc(%d) != LSM_ERR_OK", rc); \
+            lsm_error_free(lsm_err); \
+        } \
+        if (rc == LSM_ERR_OK) { \
+            printf(# on_func "(): success on disk %s\n", disk_path); \
+        } \
+        if (rc == LSM_ERR_NO_SUPPORT) { \
+            printf(# on_func "(): not supported disk %s\n", disk_path); \
+        } \
+        rc = off_func(disk_path, &lsm_err); \
+        fail_unless(rc == LSM_ERR_OK || rc == LSM_ERR_NO_SUPPORT || \
+                    rc == LSM_ERR_PERMISSION_DENIED, \
+                    # off_func "(): Got unexpected return: %d", rc); \
+        if (rc != LSM_ERR_OK) { \
+            fail_unless(lsm_err != NULL, \
+                        # off_func "(): Got NULL lsm_err " \
+                        "while rc(%d) != LSM_ERR_OK", rc); \
+            lsm_error_free(lsm_err); \
+        } \
+        if (rc == LSM_ERR_OK) { \
+            printf(# off_func "(): success on disk %s\n", disk_path); \
+        } \
+        if (rc == LSM_ERR_NO_SUPPORT) { \
+            printf(# off_func "(): not supported disk %s\n", disk_path); \
+        } \
+    } \
+    lsm_string_list_free(disk_paths); \
+} while(0)
+
+START_TEST(test_local_disk_ident_led)
+{
+    _TEST_LOCAL_DISK_LED(lsm_local_disk_ident_led_on,
+                         lsm_local_disk_ident_led_off);
+}
+END_TEST
+
+START_TEST(test_local_disk_fault_led)
+{
+    _TEST_LOCAL_DISK_LED(lsm_local_disk_fault_led_on,
+                         lsm_local_disk_fault_led_off);
+}
+END_TEST
+
 Suite * lsm_suite(void)
 {
     Suite *s = suite_create("libStorageMgmt");
@@ -3044,7 +3864,11 @@ Suite * lsm_suite(void)
     tcase_add_test(basic, test_capability);
     tcase_add_test(basic, test_nfs_export_funcs);
     tcase_add_test(basic, test_disks);
+    tcase_add_test(basic, test_disk_location);
+    tcase_add_test(basic, test_disk_rpm_and_link_type);
     tcase_add_test(basic, test_plugin_info);
+    tcase_add_test(basic, test_system_fw_version);
+    tcase_add_test(basic, test_system_mode);
     tcase_add_test(basic, test_get_available_plugins);
     tcase_add_test(basic, test_volume_methods);
     tcase_add_test(basic, test_iscsi_auth_in);
@@ -3052,6 +3876,7 @@ Suite * lsm_suite(void)
     tcase_add_test(basic, test_smoke_test);
     tcase_add_test(basic, test_access_groups);
     tcase_add_test(basic, test_systems);
+    tcase_add_test(basic, test_read_cache_pct);
     tcase_add_test(basic, test_access_groups_grant_revoke);
     tcase_add_test(basic, test_fs);
     tcase_add_test(basic, test_ss);
@@ -3061,6 +3886,21 @@ Suite * lsm_suite(void)
     tcase_add_test(basic, test_pool_member_info);
     tcase_add_test(basic, test_volume_raid_create_cap_get);
     tcase_add_test(basic, test_volume_raid_create);
+    tcase_add_test(basic, test_volume_ident_led_on);
+    tcase_add_test(basic, test_volume_ident_led_off);
+    tcase_add_test(basic, test_local_disk_vpd83_search);
+    tcase_add_test(basic, test_local_disk_vpd83_get);
+    tcase_add_test(basic, test_read_cache_pct_update);
+    tcase_add_test(basic, test_local_disk_list);
+    tcase_add_test(basic, test_local_disk_rpm_get);
+    tcase_add_test(basic, test_local_disk_link_type);
+    tcase_add_test(basic, test_batteries);
+    tcase_add_test(basic, test_volume_cache_info);
+    tcase_add_test(basic, test_volume_pdc_update);
+    tcase_add_test(basic, test_volume_wcp_update);
+    tcase_add_test(basic, test_volume_rcp_update);
+    tcase_add_test(basic, test_local_disk_ident_led);
+    tcase_add_test(basic, test_local_disk_fault_led);
 
     suite_add_tcase(s, basic);
     return s;
@@ -3072,16 +3912,11 @@ int main(int argc, char** argv)
     Suite *s = lsm_suite();
     SRunner *sr = srunner_create(s);
 
-    /*
-     * Don't run python plug-in tests if we are looking for
-     * memory leaks.
+    /* Test against simc:// if got any cli argument
+     * else use sim:// instead
      */
-    if( !getenv("LSM_VALGRIND") ) {
-        srunner_run_all(sr, CK_NORMAL);
-    }
-
-    /* Switch plug-in backend to test C language compat. */
-    which_plugin = 1;
+    if ((argc >= 2) && (argv[1] != NULL))
+        is_simc_plugin = 1;
 
     srunner_run_all(sr, CK_NORMAL);
 
