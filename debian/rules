@@ -13,5 +13,5 @@ include /usr/share/dpkg/buildflags.mk
 
 override_dh_auto_configure:
 	autoreconf -i -f
-	./configure --prefix=/usr --disable-build-c-unit
+	./configure --prefix=/usr --without-test
 
