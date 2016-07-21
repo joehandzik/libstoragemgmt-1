@@ -32,7 +32,7 @@ Description: library for storage array management - daemon
 Package: python-libstoragemgmt
 Architecture: all
 Section: python
-Depends: ${misc:Depends}, ${python:Depends}, python-m2crypto
+Depends: libstoragemgmt-python-clibs (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}, python-m2crypto
 Description: library for storage array management - Python libraries
  vendor agnostic library interface to manage storage arrays. libstoragemgmt
  provides a single, unified, agnostic API library interface to storage
@@ -62,3 +62,13 @@ Description: library for storage array management - development library
  arrays
  .
  This package contains the library
+
+Package: libstoragemgmt-python-clibs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: library for storage array management - Python c library
+ vendor agnostic library interface to manage storage arrays. libstoragemgmt
+ provides a single, unified, agnostic API library interface to storage
+ arrays
+ .
+ This package contains the c library for the Python API
