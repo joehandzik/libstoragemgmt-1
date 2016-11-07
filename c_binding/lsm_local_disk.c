@@ -58,7 +58,6 @@
 
 #define _SYSFS_BLK_PATH_FORMAT "/sys/block/%s"
 #define _MAX_SYSFS_BLK_PATH_STR_LEN 128 + _MAX_SD_NAME_STR_LEN
-#define _LSM_ERR_MSG_LEN 255
 #define _SYSFS_SAS_ADDR_LEN                     _SG_T10_SPL_SAS_ADDR_LEN + 2
 /* ^ Only Linux sysfs entry /sys/block/sdx/device/sas_address which
  *   format is '0x<hex_addr>\0'
@@ -96,8 +95,6 @@ static int _sysfs_sas_addr_get(const char *blk_name, char *tp_sas_addr);
 static int _ses_ctrl(const char *disk_path, lsm_error **lsm_err,
                      int action, int action_type);
 
-static const char *_sd_name_of(const char *disk_path);
-
 /*
  * Retrieve the content of /sys/block/sda/device/vpd_pg83 file.
  * No argument checker here, assume all non-NULL and vpd_data is
@@ -129,8 +126,12 @@ static int _sysfs_vpd_pg83_data_get(char *err_msg, const char *sd_name,
     file_rc = _read_file(sysfs_path, vpd_data, read_size,
                          _SG_T10_SPC_VPD_MAX_LEN);
     if (file_rc != 0) {
-        if (errno == ENOENT) {
+        if (file_rc == ENOENT) {
             _lsm_err_msg_set(err_msg, "File '%s' not exist", sysfs_path);
+            return LSM_ERR_NO_SUPPORT;
+        } else if (file_rc == EINVAL) {
+            _lsm_err_msg_set(err_msg, "Read error on File '%s': "
+                             "invalid argument", sysfs_path);
             return LSM_ERR_NO_SUPPORT;
         } else {
             _lsm_err_msg_set(err_msg, "BUG: Unknown error %d(%s) from "
@@ -255,8 +256,12 @@ static int _udev_vpd83_of_sd_name(char *err_msg, const char *sd_name,
         goto out;
     }
     wwn = udev_device_get_property_value(sd_udev, "ID_WWN_WITH_EXTENSION");
-    if (wwn == NULL)
+    if (wwn == NULL) {
+        rc = LSM_ERR_NO_SUPPORT;
+        _lsm_err_msg_set(err_msg,
+                         "SCSI VPD 83 NAA logical unit ID is not supported");
         goto out;
+    }
 
     if (strncmp(wwn, "0x", strlen("0x")) == 0)
         wwn += strlen("0x");
@@ -279,12 +284,10 @@ int lsm_local_disk_vpd83_search(const char *vpd83,
 {
     int rc = LSM_ERR_OK;
     uint32_t i = 0;
-    const char *sd_name = NULL;
     const char *disk_path = NULL;
-    char tmp_vpd83[_LSM_MAX_VPD83_ID_LEN];
-    bool sysfs_support = true;
     char err_msg[_LSM_ERR_MSG_LEN];
     lsm_string_list *disk_paths = NULL;
+    char *tmp_vpd83 = NULL;
     lsm_error *tmp_lsm_err = NULL;
 
     _lsm_err_msg_clear(err_msg);
@@ -327,29 +330,17 @@ int lsm_local_disk_vpd83_search(const char *vpd83,
     }
 
     _lsm_string_list_foreach(disk_paths, i, disk_path) {
-        sd_name = _sd_name_of(disk_path);
-        if (sd_name == NULL)
+        if (lsm_local_disk_vpd83_get(disk_path, &tmp_vpd83, &tmp_lsm_err) !=
+            LSM_ERR_OK) {
+            lsm_error_free(tmp_lsm_err);
             continue;
-
-        if (sysfs_support == true) {
-            rc = _sysfs_vpd83_naa_of_sd_name(err_msg, sd_name, tmp_vpd83);
-            if (rc == LSM_ERR_NO_SUPPORT) {
-                sysfs_support = false;
-            } else if (rc == LSM_ERR_NOT_FOUND_DISK) {
-                /* In case disk got removed after lsm_local_disk_list() */
-                continue;
-            }
-            else if (rc != LSM_ERR_OK)
-                break;
         }
-        /* Try udev way if got NO_SUPPORT from sysfs way. */
-        if (sysfs_support == false) {
-            rc = _udev_vpd83_of_sd_name(err_msg, sd_name, tmp_vpd83);
-            if (rc == LSM_ERR_NOT_FOUND_DISK)
-                /* In case disk got removed after lsm_local_disk_list() */
-                continue;
-            else if (rc != LSM_ERR_OK)
-                break;
+        if (tmp_vpd83 == NULL) {
+            rc = LSM_ERR_LIB_BUG;
+            _lsm_err_msg_set(err_msg, "BUG: lsm_local_disk_vpd83_get() on "
+                             "'%s',return NULL for vpd83 and LSM_ERR_OK",
+                             disk_path);
+            goto out;
         }
         if (strncmp(vpd83, tmp_vpd83, _LSM_MAX_VPD83_ID_LEN) == 0) {
             if (lsm_string_list_append(*disk_path_list, disk_path) != 0) {
@@ -357,11 +348,15 @@ int lsm_local_disk_vpd83_search(const char *vpd83,
                 goto out;
             }
         }
+        free(tmp_vpd83);
+        tmp_vpd83 = NULL;
     }
 
  out:
     if (disk_paths != NULL)
         lsm_string_list_free(disk_paths);
+
+    free(tmp_vpd83);
 
     if (rc == LSM_ERR_OK) {
         /* clean disk_path_list if nothing found */
@@ -382,15 +377,6 @@ int lsm_local_disk_vpd83_search(const char *vpd83,
     }
 
     return rc;
-}
-
-static const char *_sd_name_of(const char *disk_path)
-{
-    assert(disk_path != NULL);
-
-    if (strncmp(disk_path, "/dev/sd", strlen("/dev/sd")) == 0)
-        return disk_path + strlen("/dev/");
-    return NULL;
 }
 
 int lsm_local_disk_vpd83_get(const char *disk_path, char **vpd83,
@@ -781,6 +767,7 @@ static int _sysfs_sas_addr_get(const char *blk_name, char *tp_sas_addr)
     char sysfs_sas_addr[_SYSFS_SAS_ADDR_LEN];
     char *sysfs_sas_path = NULL;
     ssize_t read_size = -1;
+    int tmp_rc = 0;
 
     assert(blk_name != NULL);
     assert(tp_sas_addr != NULL);
@@ -795,19 +782,20 @@ static int _sysfs_sas_addr_get(const char *blk_name, char *tp_sas_addr)
         goto out;
 
     sprintf(sysfs_sas_path, "/sys/block/%s/device/sas_address", blk_name);
+    if (! _file_exists(sysfs_sas_path))
+        goto out;
 
-    if (! _file_exists(sysfs_sas_path) ||
-        (_read_file(sysfs_sas_path, (uint8_t *) sysfs_sas_addr, &read_size,
-                    _SYSFS_SAS_ADDR_LEN) != 0) ||
-        (read_size != _SYSFS_SAS_ADDR_LEN) ||
-        (strlen(sysfs_sas_addr) != _SYSFS_SAS_ADDR_LEN) ||
-        (strncmp(sysfs_sas_addr, "0x", strlen("0x")) != 0))
+    tmp_rc = _read_file(sysfs_sas_path, (uint8_t *) sysfs_sas_addr, &read_size,
+                        _SYSFS_SAS_ADDR_LEN);
+    /* As sysfs entry has trailing '\n', we should get EFBIG here */
+    if (tmp_rc != EFBIG)
+        goto out;
+
+    if (strncmp(sysfs_sas_addr, "0x", strlen("0x")) != 0)
         goto out;
 
     memcpy(tp_sas_addr, sysfs_sas_addr + strlen("0x"),
            _SG_T10_SPL_SAS_ADDR_LEN);
-    tp_sas_addr[_SG_T10_SPL_SAS_ADDR_LEN - 1] = '\0';
-    /* ^ Replace trailing \n as \0 */
 
     rc = 0;
 
