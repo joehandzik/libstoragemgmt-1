@@ -867,44 +867,44 @@ cmds = (
     ),
 )
 
-aliases = (
-    ['ls', 'list --type systems'],
-    ['lp', 'list --type pools'],
-    ['lv', 'list --type volumes'],
-    ['ld', 'list --type disks'],
-    ['la', 'list --type access_groups'],
-    ['lf', 'list --type fs'],
-    ['lt', 'list --type target_ports'],
-    ['c', 'capabilities'],
-    ['p', 'plugin-info'],
-    ['vc', 'volume-create'],
-    ['vrc', 'volume-raid-create'],
-    ['vrcc', 'volume-raid-create-cap'],
-    ['vd', 'volume-delete'],
-    ['vr', 'volume-resize'],
-    ['vm', 'volume-mask'],
-    ['vu', 'volume-unmask'],
-    ['ve', 'volume-enable'],
-    ['vi', 'volume-disable'],
-    ['ac', 'access-group-create'],
-    ['aa', 'access-group-add'],
-    ['ar', 'access-group-remove'],
-    ['ad', 'access-group-delete'],
-    ['vri', 'volume-raid-info'],
-    ['vilon', 'volume-ident-led-on'],
-    ['viloff', 'volume-ident-led-off'],
-    ['srcpu', 'system-read-cache-pct-update'],
-    ['pmi', 'pool-member-info'],
-    ['ldl', 'local-disk-list'],
-    ['lb', 'list --type batteries'],
-    ['vci', 'volume-cache-info'],
-    ['vpdcu', 'volume-phy-disk-cache-update'],
-    ['vrcpu', 'volume-read-cache-policy-update'],
-    ['vwcpu', 'volume-write-cache-policy-update'],
-    ['ldilon', 'local-disk-ident-led-on'],
-    ['ldiloff', 'local-disk-ident-led-off'],
-    ['ldflon', 'local-disk-fault-led-on'],
-    ['ldfloff', 'local-disk-fault-led-off'],
+aliases = dict(
+    ls='list --type systems',
+    lp='list --type pools',
+    lv='list --type volumes',
+    ld='list --type disks',
+    la='list --type access_groups',
+    lf='list --type fs',
+    lt='list --type target_ports',
+    c='capabilities',
+    p='plugin-info',
+    vc='volume-create',
+    vrc='volume-raid-create',
+    vrcc='volume-raid-create-cap',
+    vd='volume-delete',
+    vr='volume-resize',
+    vm='volume-mask',
+    vu='volume-unmask',
+    ve='volume-enable',
+    vi='volume-disable',
+    ac='access-group-create',
+    aa='access-group-add',
+    ar='access-group-remove',
+    ad='access-group-delete',
+    vri='volume-raid-info',
+    vilon='volume-ident-led-on',
+    viloff='volume-ident-led-off',
+    srcpu='system-read-cache-pct-update',
+    pmi='pool-member-info',
+    ldl='local-disk-list',
+    lb='list --type batteries',
+    vci='volume-cache-info',
+    vpdcu='volume-phy-disk-cache-update',
+    vrcpu='volume-read-cache-policy-update',
+    vwcpu='volume-write-cache-policy-update',
+    ldilon='local-disk-ident-led-on',
+    ldiloff='local-disk-ident-led-off',
+    ldflon='local-disk-fault-led-on',
+    ldfloff='local-disk-fault-led-off',
 )
 
 
@@ -977,11 +977,30 @@ class CmdLine:
 
         self.display_data(d)
 
-    def handle_alias(self, args):
-        cmd_arguments = args.cmd
-        cmd_arguments.extend(self.unknown_args)
-        new_args = self.parser.parse_args(cmd_arguments)
-        new_args.func(new_args)
+    @staticmethod
+    def handle_alias():
+        """
+        Walk the command line argument list and build up a new command line
+        with the appropriate substitutions which is then passed to argparse, so
+        that we can avoid adding more sub parsers and do all argument parsing
+        before the need to talk to the library
+        :return copy of command line args with alias expansion:
+        """
+        rc = []
+        for i in sys.argv[1:]:
+            if i in aliases:
+                rc.extend(aliases[i].split(" "))
+            else:
+                rc.append(i)
+        return rc
+
+    @staticmethod
+    def alias_help_text():
+        rc = "command aliases:\n"
+        for k, v in sorted(aliases.items()):
+            rc += "   {0:<18}   Alias of '{1}'\n".format(k, v)
+        return rc
+
 
     ## All the command line arguments and options are created in this method
     def cli(self):
@@ -994,7 +1013,8 @@ class CmdLine:
         parser = ArgumentParser(
             description='The libStorageMgmt command line interface.'
                         ' Run %(prog)s <command> -h for more on each command.',
-            epilog='Copyright 2012-2016 Red Hat, Inc.\n'
+            epilog=CmdLine.alias_help_text() +
+                   '\n\nCopyright 2012-2016 Red Hat, Inc.\n'
                    'Please report bugs to '
                    '<libstoragemgmt-devel@lists.fedorahosted.org>\n',
             formatter_class=RawTextHelpFormatter)
@@ -1025,16 +1045,9 @@ class CmdLine:
             sub_parser.set_defaults(
                 func=getattr(self, cmd['name'].replace("-", "_")))
 
-        for alias in aliases:
-            sub_parser = subparsers.add_parser(
-                alias[0], help="Alias of '%s'" % alias[1],
-                parents=[parent_parser],
-                formatter_class=RawTextHelpFormatter, add_help=False)
-            sub_parser.set_defaults(
-                cmd=alias[1].split(" "), func=self.handle_alias)
-
         self.parser = parser
-        known_args, self.unknown_args = parser.parse_known_args()
+
+        known_args = parser.parse_args(args=CmdLine.handle_alias())
         # Copy child value to root.
         for k, v in vars(known_args).iteritems():
             if k.startswith(_CHILD_OPTION_DST_PREFIX):
@@ -1443,7 +1456,7 @@ class CmdLine:
 
         if s == JobStatus.COMPLETE:
             if item:
-                self.display_data([item])
+                self.display_data([_add_sd_paths(item)])
 
             self.c.job_free(args.job)
         else:
@@ -1488,7 +1501,8 @@ class CmdLine:
 
         ranges = []
         for b in range(len(src_starts)):
-            ranges.append(BlockRange(src_starts[b], dst_starts[b], counts[b]))
+            ranges.append(BlockRange(long(src_starts[b]), long(dst_starts[b]),
+                                     long(counts[b])))
 
         if self.confirm_prompt(False):
             self.c.volume_replicate_range(rep_type, src, dst, ranges)
@@ -1631,6 +1645,8 @@ class CmdLine:
         read_pct = int(args.read_pct)
 
         self.c.system_read_cache_pct_update(lsm_system, read_pct)
+        lsm_system = _get_item(self.c.systems(), args.sys, "System")
+        self.display_data([lsm_system])
 
     ## Displays file system dependants
     def fs_dependants(self, args):
@@ -1675,11 +1691,8 @@ class CmdLine:
         """
         Return True if current command is one of _CONNECTION_FREE_COMMANDS.
         """
-        if self.args.func == self.handle_alias and \
-           self.args.cmd[0] in _CONNECTION_FREE_COMMANDS:
-            return True
-
-        if self.args.func.__name__ in _CONNECTION_FREE_COMMANDS:
+        if self.args.func.__name__.replace("_", "-") in \
+           _CONNECTION_FREE_COMMANDS:
             return True
         return False
 
@@ -1769,13 +1782,17 @@ class CmdLine:
     def local_disk_list(self, args):
         local_disks = []
         for disk_path in LocalDisk.list():
+            vpd83 = ""
+            rpm = Disk.RPM_NO_SUPPORT
+            link_type = Disk.LINK_TYPE_NO_SUPPORT
             try:
                 vpd83 = LocalDisk.vpd83_get(disk_path)
+                rpm = LocalDisk.rpm_get(disk_path)
+                link_type = LocalDisk.link_type_get(disk_path)
             except LsmError as lsm_err:
-                vpd83 = ""
+                if lsm_err.code != ErrorNumber.NO_SUPPORT:
+                    raise
 
-            rpm = LocalDisk.rpm_get(disk_path)
-            link_type = LocalDisk.link_type_get(disk_path)
             local_disks.append(
                 LocalDiskInfo(disk_path, vpd83, rpm, link_type))
 
